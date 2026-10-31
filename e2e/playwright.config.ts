@@ -46,6 +46,15 @@ export default defineConfig({
     url: `http://localhost:${PORT}/api/meta`,
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { DATA_DIR, PORT: String(PORT), LOG_LEVEL: "warn" },
+    // All browser contexts share one IP, so the per-IP backstop must not throttle the suite.
+    env: {
+      DATA_DIR,
+      PORT: String(PORT),
+      LOG_LEVEL: "warn",
+      RATE_LIMIT_MAX: "100000",
+      RATE_LIMIT_AUTH_MAX: "100000",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
   },
 });

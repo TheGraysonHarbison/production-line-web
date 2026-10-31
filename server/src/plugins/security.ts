@@ -6,8 +6,10 @@ import { forbidden } from "../errors.js";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-/** Per-route config for login/register (dev doc §9.4). */
-export const AUTH_RATE_LIMIT = { max: 10, timeWindow: "1 minute" } as const;
+/** Per-route rate-limit config for login/register (dev doc §9.4): 10/min/IP unless overridden for tests. */
+export function authRateLimit(max: number) {
+  return { max, timeWindow: "1 minute" } as const;
+}
 
 /**
  * Helmet (same-origin CSP, no HTTPS upgrades because v1 is plain HTTP), global rate limit,
@@ -36,7 +38,7 @@ const securityPlugin: FastifyPluginAsync = async (app) => {
 
   await app.register(fastifyRateLimit, {
     global: true,
-    max: 300,
+    max: app.ctx.config.rateLimitMax,
     timeWindow: "1 minute",
     onExceeded: (request) => {
       request.log.warn({ ip: request.ip, url: request.url }, "auth.rate_limited");
@@ -69,4 +71,4 @@ const securityPlugin: FastifyPluginAsync = async (app) => {
   });
 };
 
-export default fp(securityPlugin, { name: "security" });
+export default fp(securityPlugin, { name: "security", dependencies: ["context"] });

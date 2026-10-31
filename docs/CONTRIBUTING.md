@@ -38,6 +38,10 @@ On a host where `localhost` resolves to IPv6 first, test with `http://127.0.0.1:
 - Migrations are numbered SQL files in `server/migrations/` (`0002_short_name.sql`). They run automatically on server start and via `npm run db:migrate` (built) or `npm run db:migrate -w server` (from source). Each file runs in its own transaction and is recorded in `schema_migrations`. Forward-only: never edit a shipped migration; add a new one.
 - `secret.key` in `$DATA_DIR` is the AES-256-GCM key for secrets at rest (the Home Assistant token). Losing it only means re-entering that token.
 
+## Test-only environment overrides
+
+`RATE_LIMIT_MAX` raises the global per-IP request backstop (default 300/min) and `RATE_LIMIT_AUTH_MAX` the login/register limit (default 10/min). They exist so the Playwright suite, whose browser contexts all share one IP, is not throttled. It is not a supported production setting and is intentionally undocumented in the README.
+
 ## Auth and API conventions
 
 - Sessions are server-side rows referenced by a signed `plw_session` cookie (`httpOnly`, `SameSite=Lax`, `Path=/`, not `Secure` in v1). `request.user` is populated by the auth plugin; routes guard with `requireAuth` / `requireRole("admin" | "owner")`.

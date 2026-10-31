@@ -11,6 +11,12 @@ export interface Config {
   dataDir: string;
   /** Honour X-Forwarded-* headers from a reverse proxy. */
   trustProxy: boolean;
+  /** Global per-IP rate limit per minute (dev doc §9.4 backstop). Override is for test suites only. */
+  rateLimitMax: number;
+  /** Login/register attempts per minute per IP (dev doc §9.4). Override is for test suites only. */
+  rateLimitAuthMax: number;
+  /** SSE heartbeat interval override (tests only; unset in production). */
+  streamHeartbeatMs?: number;
 }
 
 const LOG_LEVELS = new Set(["fatal", "error", "warn", "info", "debug", "trace", "silent"]);
@@ -39,11 +45,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error("DATA_DIR must not be empty");
   }
 
+  const positiveInt = (name: string, raw: string | undefined, fallback: number): number => {
+    const value = Number(raw ?? String(fallback));
+    if (!Number.isInteger(value) || value < 1) {
+      throw new Error(`${name} must be a positive integer, got "${raw}"`);
+    }
+    return value;
+  };
+  const rateLimitMax = positiveInt("RATE_LIMIT_MAX", env.RATE_LIMIT_MAX, 300);
+  const rateLimitAuthMax = positiveInt("RATE_LIMIT_AUTH_MAX", env.RATE_LIMIT_AUTH_MAX, 10);
+
   return {
     port,
     host: env.HOST ?? "0.0.0.0",
     logLevel,
     dataDir: resolve(dataDirRaw),
     trustProxy: parseBool("TRUST_PROXY", env.TRUST_PROXY, false),
+    rateLimitMax,
+    rateLimitAuthMax,
   };
 }

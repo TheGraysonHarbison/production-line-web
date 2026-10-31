@@ -13,6 +13,12 @@ interface JoinedRow extends UserRow {
   expires_at: string;
 }
 
+export type RevokeListener = (revoked: {
+  sessionId?: string;
+  userId?: number;
+  keepSessionId?: string;
+}) => void;
+
 export interface SessionRow {
   id: string;
   user_id: number;
@@ -29,6 +35,7 @@ export class SessionsService {
   private readonly removeForUser;
   private readonly removeOthers;
   private readonly purge;
+  private readonly revokeListeners: RevokeListener[] = [];
 
   constructor(db: DatabaseSync) {
     this.insert = db.prepare(
@@ -90,8 +97,14 @@ export class SessionsService {
     return { session, user };
   }
 
+  /** Called whenever sessions are revoked, so live streams bound to them can be closed. */
+  onRevoke(listener: RevokeListener): void {
+    this.revokeListeners.push(listener);
+  }
+
   delete(id: string): void {
     this.remove.run({ id });
+    for (const l of this.revokeListeners) l({ sessionId: id });
   }
 
   /** Revokes every session of a user (password change, deletion). Optionally keeps one. */
@@ -99,6 +112,7 @@ export class SessionsService {
     const result = keep
       ? this.removeOthers.run({ user_id: userId, keep })
       : this.removeForUser.run({ user_id: userId });
+    for (const l of this.revokeListeners) l(keep ? { userId, keepSessionId: keep } : { userId });
     return Number(result.changes);
   }
 

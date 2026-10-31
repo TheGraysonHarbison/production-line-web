@@ -16,6 +16,7 @@ import { printersRoutes } from "./routes/printers.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { setupRoutes } from "./routes/setup.js";
 import { slotsRoutes } from "./routes/slots.js";
+import { streamRoutes } from "./routes/stream.js";
 import { usersRoutes } from "./routes/users.js";
 
 declare module "fastify" {
@@ -44,6 +45,8 @@ export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     loggerInstance: ctx.log,
     trustProxy: ctx.config.trustProxy,
+    // Open SSE connections must not keep close() waiting.
+    forceCloseConnections: true,
   });
 
   // Expose the context to every plugin/route as a named plugin so dependencies can be declared.
@@ -52,6 +55,7 @@ export async function buildApp(options: BuildAppOptions) {
       async (instance) => {
         instance.decorate("ctx", ctx);
         instance.addHook("onClose", async () => {
+          ctx.broadcaster.stop();
           ctx.db.close();
         });
       },
@@ -74,6 +78,7 @@ export async function buildApp(options: BuildAppOptions) {
       await api.register(printersRoutes);
       await api.register(settingsRoutes);
       await api.register(slotsRoutes);
+      await api.register(streamRoutes);
     },
     { prefix: "/api" },
   );
