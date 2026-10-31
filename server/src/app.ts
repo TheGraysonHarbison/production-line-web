@@ -3,8 +3,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
+import fp from "fastify-plugin";
 import type { AppContext } from "./context.js";
+import { errorHandler } from "./errors.js";
+import authPlugin from "./plugins/auth.js";
+import securityPlugin from "./plugins/security.js";
+import setupRedirectPlugin from "./plugins/setup-redirect.js";
+import { authRoutes } from "./routes/auth.js";
+import { meRoutes } from "./routes/me.js";
 import { metaRoutes } from "./routes/meta.js";
+import { setupRoutes } from "./routes/setup.js";
+import { usersRoutes } from "./routes/users.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -34,12 +43,34 @@ export async function buildApp(options: BuildAppOptions) {
     trustProxy: ctx.config.trustProxy,
   });
 
-  app.decorate("ctx", ctx);
-  app.addHook("onClose", async () => {
-    ctx.db.close();
-  });
+  // Expose the context to every plugin/route as a named plugin so dependencies can be declared.
+  await app.register(
+    fp(
+      async (instance) => {
+        instance.decorate("ctx", ctx);
+        instance.addHook("onClose", async () => {
+          ctx.db.close();
+        });
+      },
+      { name: "context" },
+    ),
+  );
 
-  await app.register(metaRoutes, { prefix: "/api" });
+  app.setErrorHandler(errorHandler);
+  await app.register(securityPlugin);
+  await app.register(authPlugin);
+  await app.register(setupRedirectPlugin);
+
+  await app.register(
+    async (api) => {
+      await api.register(metaRoutes);
+      await api.register(setupRoutes);
+      await api.register(authRoutes);
+      await api.register(meRoutes);
+      await api.register(usersRoutes);
+    },
+    { prefix: "/api" },
+  );
 
   const publicDir = options.publicDir ?? join(here, "..", "public");
   const hasClient = existsSync(join(publicDir, "index.html"));

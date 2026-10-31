@@ -5,7 +5,9 @@ import { bootstrapDataDir, type DataDir } from "./data-dir.js";
 import { openDatabase } from "./db/connection.js";
 import { migrate } from "./db/migrate.js";
 import { AppEvents } from "./events.js";
+import { SessionsService } from "./services/sessions.js";
 import { SettingsService } from "./services/settings.js";
+import { UsersService } from "./services/users.js";
 
 /** Everything the routes and services need, built once at startup. */
 export interface AppContext {
@@ -14,6 +16,8 @@ export interface AppContext {
   db: DatabaseSync;
   events: AppEvents;
   settings: SettingsService;
+  users: UsersService;
+  sessions: SessionsService;
   log: Logger;
 }
 
@@ -39,7 +43,12 @@ export function createContext(config: Config, log: Logger): AppContext {
   const settings = new SettingsService(db, dataDir.secretKey, events);
   settings.seedDefaults();
 
-  return { config, dataDir, db, events, settings, log };
+  const users = new UsersService(db, events);
+  const sessions = new SessionsService(db);
+  const purged = sessions.purgeExpired();
+  if (purged > 0) log.info({ purged }, "sessions.purged");
+
+  return { config, dataDir, db, events, settings, users, sessions, log };
 }
 
 export function closeContext(ctx: AppContext): void {
