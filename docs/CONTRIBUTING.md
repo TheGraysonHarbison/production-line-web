@@ -38,6 +38,13 @@ On a host where `localhost` resolves to IPv6 first, test with `http://127.0.0.1:
 - Migrations are numbered SQL files in `server/migrations/` (`0002_short_name.sql`). They run automatically on server start and via `npm run db:migrate` (built) or `npm run db:migrate -w server` (from source). Each file runs in its own transaction and is recorded in `schema_migrations`. Forward-only: never edit a shipped migration; add a new one.
 - `secret.key` in `$DATA_DIR` is the AES-256-GCM key for secrets at rest (the Home Assistant token). Losing it only means re-entering that token.
 
+## Auth and API conventions
+
+- Sessions are server-side rows referenced by a signed `plw_session` cookie (`httpOnly`, `SameSite=Lax`, `Path=/`, not `Secure` in v1). `request.user` is populated by the auth plugin; routes guard with `requireAuth` / `requireRole("admin" | "owner")`.
+- Every mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) must send an `Origin` header matching the server's origin, or it is rejected with `403 csrf_origin_*`. Browsers do this automatically; scripts and tests must set it explicitly.
+- Errors are JSON: `{ error: "<code>", message?, issues? }`. Zod failures are `400 validation` with per-field `issues`; `401 unauthorized`, `403 <reason>`, `404 <thing>_not_found`, `409 <conflict>`, `429 rate_limited`.
+- Validation schemas live in `packages/shared` and are parsed in the route handler (`Schema.parse(request.body)`); never re-implement the rules in the client.
+
 ## Rules
 
 - Zero native Node addons at runtime. The production dependency tree (`npm ls --omit=dev -w server`) must be pure JavaScript. Check any new dependency for a `binding.gyp` or install-time compile step before adding it.

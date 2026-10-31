@@ -45,7 +45,11 @@ describe("static client + SPA fallback", () => {
   });
 
   it("does not fall back for non-GET requests", async () => {
-    const res = await t.app.inject({ method: "POST", url: "/some/deep/link" });
+    const res = await t.app.inject({
+      method: "POST",
+      url: "/some/deep/link",
+      headers: { origin: "http://localhost:80" },
+    });
     expect(res.statusCode).toBe(404);
   });
 });

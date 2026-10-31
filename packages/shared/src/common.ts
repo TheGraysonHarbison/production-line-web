@@ -17,3 +17,18 @@ export const TimeFormatSchema = z.enum(["12h", "24h"]);
 export type TimeFormat = z.infer<typeof TimeFormatSchema>;
 
 export const IdSchema = z.number().int().positive();
+
+/** True when `tz` is an IANA zone the runtime knows (e.g. "America/New_York"). */
+export function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const TimeZoneSchema = z
+  .string()
+  .min(1)
+  .refine(isValidTimeZone, "must be an IANA time zone name");

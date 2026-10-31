@@ -1,27 +1,51 @@
-import { useQuery } from "@tanstack/react-query";
-import { Route, Routes } from "react-router";
-import { fetchMeta } from "./api.ts";
-
-function Home() {
-  const meta = useQuery({ queryKey: ["meta"], queryFn: fetchMeta });
-
-  return (
-    <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-4 px-4">
-      <h1 className="text-3xl font-semibold tracking-tight">Production Line</h1>
-      <p className="opacity-80">Shared 3D printer scheduling for your LAN.</p>
-      <p data-testid="meta-status" className="text-sm opacity-70">
-        {meta.isPending && "Connecting to server…"}
-        {meta.isError && `Server unreachable: ${meta.error.message}`}
-        {meta.isSuccess && `Server timezone: ${meta.data.timezone}`}
-      </p>
-    </main>
-  );
-}
+import { Navigate, Route, Routes } from "react-router";
+import { PublicOnly, RequireAuth, SetupOnly } from "./components/Guards.tsx";
+import { HomePage } from "./pages/HomePage.tsx";
+import { LoginPage } from "./pages/LoginPage.tsx";
+import { ProfilePage } from "./pages/ProfilePage.tsx";
+import { RegisterPage } from "./pages/RegisterPage.tsx";
+import { SetupPage } from "./pages/SetupPage.tsx";
+import { Shell } from "./pages/Shell.tsx";
 
 export function App() {
   return (
     <Routes>
-      <Route path="/*" element={<Home />} />
+      <Route
+        path="/setup"
+        element={
+          <SetupOnly>
+            <SetupPage />
+          </SetupOnly>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <PublicOnly>
+            <LoginPage />
+          </PublicOnly>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicOnly>
+            <RegisterPage />
+          </PublicOnly>
+        }
+      />
+      <Route
+        element={
+          <RequireAuth>
+            <Shell />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<HomePage />} />
+        <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
+        <Route path="/settings/profile" element={<ProfilePage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
