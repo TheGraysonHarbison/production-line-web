@@ -2,12 +2,21 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
-import Fastify, { type FastifyInstance } from "fastify";
-import type { Config } from "./config.js";
+import Fastify from "fastify";
+import type { AppContext } from "./context.js";
 import { metaRoutes } from "./routes/meta.js";
 
+declare module "fastify" {
+  interface FastifyInstance {
+    ctx: AppContext;
+  }
+}
+
+/** The concrete app type (Fastify instance with our pino logger). */
+export type App = Awaited<ReturnType<typeof buildApp>>;
+
 export interface BuildAppOptions {
-  config: Config;
+  ctx: AppContext;
   /** Directory holding the built SPA. Defaults to `server/public`. */
   publicDir?: string;
 }
@@ -16,10 +25,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Builds the Fastify application without listening, so tests can use `app.inject()`.
+ * Closing the app closes the database.
  */
-export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
+export async function buildApp(options: BuildAppOptions) {
+  const { ctx } = options;
   const app = Fastify({
-    logger: { level: options.config.logLevel },
+    loggerInstance: ctx.log,
+    trustProxy: ctx.config.trustProxy,
+  });
+
+  app.decorate("ctx", ctx);
+  app.addHook("onClose", async () => {
+    ctx.db.close();
   });
 
   await app.register(metaRoutes, { prefix: "/api" });

@@ -33,6 +33,7 @@ COPY --from=build /app/packages/shared/package.json ./packages/shared/package.js
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/server/package.json ./server/package.json
 COPY --from=build /app/server/dist ./server/dist
+COPY --from=build /app/server/migrations ./server/migrations
 COPY --from=build /app/server/public ./server/public
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
