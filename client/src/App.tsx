@@ -6,6 +6,11 @@ import { ProfilePage } from "./pages/ProfilePage.tsx";
 import { RegisterPage } from "./pages/RegisterPage.tsx";
 import { SetupPage } from "./pages/SetupPage.tsx";
 import { Shell } from "./pages/Shell.tsx";
+import { GeneralPage } from "./pages/settings/GeneralPage.tsx";
+import { HomeAssistantPage } from "./pages/settings/HomeAssistantPage.tsx";
+import { PrintersPage } from "./pages/settings/PrintersPage.tsx";
+import { SettingsLayout } from "./pages/settings/SettingsLayout.tsx";
+import { UsersPage } from "./pages/settings/UsersPage.tsx";
 
 export function App() {
   return (
@@ -42,8 +47,14 @@ export function App() {
         }
       >
         <Route index element={<HomePage />} />
-        <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
-        <Route path="/settings/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<SettingsLayout />}>
+          <Route index element={<Navigate to="/settings/profile" replace />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="printers" element={<PrintersPage />} />
+          <Route path="general" element={<GeneralPage />} />
+          <Route path="home-assistant" element={<HomeAssistantPage />} />
+          <Route path="users" element={<UsersPage />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

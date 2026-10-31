@@ -5,6 +5,7 @@ import { bootstrapDataDir, type DataDir } from "./data-dir.js";
 import { openDatabase } from "./db/connection.js";
 import { migrate } from "./db/migrate.js";
 import { AppEvents } from "./events.js";
+import { PrintersService } from "./services/printers.js";
 import { SessionsService } from "./services/sessions.js";
 import { SettingsService } from "./services/settings.js";
 import { UsersService } from "./services/users.js";
@@ -18,6 +19,7 @@ export interface AppContext {
   settings: SettingsService;
   users: UsersService;
   sessions: SessionsService;
+  printers: PrintersService;
   log: Logger;
 }
 
@@ -45,10 +47,11 @@ export function createContext(config: Config, log: Logger): AppContext {
 
   const users = new UsersService(db, events);
   const sessions = new SessionsService(db);
+  const printers = new PrintersService(db, events);
   const purged = sessions.purgeExpired();
   if (purged > 0) log.info({ purged }, "sessions.purged");
 
-  return { config, dataDir, db, events, settings, users, sessions, log };
+  return { config, dataDir, db, events, settings, users, sessions, printers, log };
 }
 
 export function closeContext(ctx: AppContext): void {
