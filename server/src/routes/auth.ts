@@ -2,7 +2,7 @@ import { LoginBodySchema, type Me, RegisterBodySchema } from "@production-line/s
 import type { FastifyPluginAsync } from "fastify";
 import { forbidden, HttpError } from "../errors.js";
 import { requireAuth } from "../plugins/auth.js";
-import { AUTH_RATE_LIMIT } from "../plugins/security.js";
+import { authRateLimit } from "../plugins/security.js";
 import { hashPassword, verifyPassword } from "../services/crypto.js";
 import { toMe } from "../services/users.js";
 
@@ -14,6 +14,7 @@ async function getDummyHash(): Promise<string> {
 }
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
+  const AUTH_RATE_LIMIT = authRateLimit(app.ctx.config.rateLimitAuthMax);
   app.post(
     "/auth/register",
     { config: { rateLimit: AUTH_RATE_LIMIT } },

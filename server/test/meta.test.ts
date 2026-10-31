@@ -61,6 +61,8 @@ describe("loadConfig", () => {
     expect(cfg.host).toBe("0.0.0.0");
     expect(cfg.logLevel).toBe("info");
     expect(cfg.trustProxy).toBe(false);
+    expect(cfg.rateLimitMax).toBe(300);
+    expect(cfg.rateLimitAuthMax).toBe(10);
     expect(cfg.dataDir.endsWith("/data")).toBe(true);
     expect(cfg.dataDir.startsWith("/")).toBe(true);
   });
@@ -77,5 +79,8 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ LOG_LEVEL: "loud" })).toThrow(/LOG_LEVEL/);
     expect(() => loadConfig({ TRUST_PROXY: "yes" })).toThrow(/TRUST_PROXY/);
     expect(() => loadConfig({ DATA_DIR: "  " })).toThrow(/DATA_DIR/);
+    expect(() => loadConfig({ RATE_LIMIT_MAX: "0" })).toThrow(/RATE_LIMIT_MAX/);
+    expect(loadConfig({ RATE_LIMIT_MAX: "50" }).rateLimitMax).toBe(50);
+    expect(() => loadConfig({ RATE_LIMIT_AUTH_MAX: "-1" })).toThrow(/RATE_LIMIT_AUTH_MAX/);
   });
 });

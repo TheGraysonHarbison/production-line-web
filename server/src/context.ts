@@ -5,6 +5,7 @@ import { bootstrapDataDir, type DataDir } from "./data-dir.js";
 import { openDatabase } from "./db/connection.js";
 import { migrate } from "./db/migrate.js";
 import { AppEvents } from "./events.js";
+import { Broadcaster } from "./services/broadcaster.js";
 import { PrintersService } from "./services/printers.js";
 import { SessionsService } from "./services/sessions.js";
 import { SettingsService } from "./services/settings.js";
@@ -22,6 +23,7 @@ export interface AppContext {
   sessions: SessionsService;
   printers: PrintersService;
   slots: SlotsService;
+  broadcaster: Broadcaster;
   log: Logger;
 }
 
@@ -54,9 +56,33 @@ export function createContext(config: Config, log: Logger): AppContext {
   const purged = sessions.purgeExpired();
   if (purged > 0) log.info({ purged }, "sessions.purged");
 
-  return { config, dataDir, db, events, settings, users, sessions, printers, slots, log };
+  // Live streams die with their sessions (§9.1): logout, password change, user deletion.
+  const broadcaster = new Broadcaster(
+    events,
+    config.streamHeartbeatMs !== undefined ? { heartbeatMs: config.streamHeartbeatMs } : {},
+  );
+  sessions.onRevoke(({ sessionId, userId, keepSessionId }) => {
+    if (sessionId !== undefined) broadcaster.closeForSession(sessionId);
+    if (userId !== undefined) broadcaster.closeForUser(userId, keepSessionId);
+  });
+  events.on("user.deleted", ({ user }) => broadcaster.closeForUser(user.id));
+
+  return {
+    config,
+    dataDir,
+    db,
+    events,
+    settings,
+    users,
+    sessions,
+    printers,
+    slots,
+    broadcaster,
+    log,
+  };
 }
 
 export function closeContext(ctx: AppContext): void {
+  ctx.broadcaster.stop();
   ctx.db.close();
 }

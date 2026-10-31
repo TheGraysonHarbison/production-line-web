@@ -3,6 +3,7 @@ import type {
   Printer,
   PublicSettings,
   PublicUser,
+  Slot,
   UpdatePrinterBody,
   UpdateSettingsBody,
 } from "@production-line/shared";
@@ -13,6 +14,19 @@ import { metaQueryKey } from "./auth.tsx";
 export const printersQueryKey = ["printers"] as const;
 export const settingsQueryKey = ["settings"] as const;
 export const usersQueryKey = ["users"] as const;
+export const slotsQueryKey = {
+  all: ["slots"] as const,
+  range: (from: string, to: string) => ["slots", from, to] as const,
+};
+
+/** Slots overlapping [from, to) as ISO instants. Patched live by the event stream. */
+export function useSlotsRange(from: string, to: string) {
+  return useQuery({
+    queryKey: slotsQueryKey.range(from, to),
+    queryFn: () =>
+      api<Slot[]>(`/api/slots?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  });
+}
 
 export function usePrinters() {
   return useQuery({ queryKey: printersQueryKey, queryFn: () => api<Printer[]>("/api/printers") });
