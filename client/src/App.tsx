@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router";
 import { PublicOnly, RequireAuth, SetupOnly } from "./components/Guards.tsx";
-import { HomePage } from "./pages/HomePage.tsx";
+import { CalendarPage } from "./pages/CalendarPage.tsx";
+import { DayPage } from "./pages/DayPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { ProfilePage } from "./pages/ProfilePage.tsx";
 import { RegisterPage } from "./pages/RegisterPage.tsx";
@@ -46,7 +47,8 @@ export function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<HomePage />} />
+        <Route index element={<CalendarPage />} />
+        <Route path="/day/:date" element={<DayPage />} />
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="/settings/profile" replace />} />
           <Route path="profile" element={<ProfilePage />} />

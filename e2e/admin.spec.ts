@@ -29,9 +29,11 @@ test("admin adds, hides, renames, and deletes a printer, and changes the timezon
 
   await row.getByRole("button", { name: `Hide ${name}` }).click();
   await expect(row.getByText("invisible")).toBeVisible();
-  // Invisible printers are not listed on the home page.
+  // Invisible printers stay in the dock but are marked not bookable.
   await page.goto("/");
-  await expect(page.getByTestId("home-printers")).not.toContainText(name);
+  await expect(
+    page.getByTestId("dock-printers").getByText(name, { exact: true }).locator(".."),
+  ).toContainText("Not bookable");
 
   await page.goto("/settings/printers");
   await row.getByRole("button", { name: `Show ${name}` }).click();

@@ -1,11 +1,13 @@
 import type {
   CreatePrinterBody,
+  CreateSlotBody,
   Printer,
   PublicSettings,
   PublicUser,
   Slot,
   UpdatePrinterBody,
   UpdateSettingsBody,
+  UpdateSlotBody,
 } from "@production-line/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api.ts";
@@ -116,6 +118,26 @@ export function useUserMutations() {
         await refresh();
         await qc.invalidateQueries({ queryKey: ["me"] });
       },
+    }),
+  };
+}
+
+export function useSlotMutations() {
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: slotsQueryKey.all });
+  return {
+    create: useMutation({
+      mutationFn: (body: CreateSlotBody) => api<Slot>("/api/slots", { method: "POST", body }),
+      onSuccess: refresh,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, ...body }: UpdateSlotBody & { id: number }) =>
+        api<Slot>(`/api/slots/${id}`, { method: "PATCH", body }),
+      onSuccess: refresh,
+    }),
+    remove: useMutation({
+      mutationFn: (id: number) => api<void>(`/api/slots/${id}`, { method: "DELETE" }),
+      onSuccess: refresh,
     }),
   };
 }
