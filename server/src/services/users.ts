@@ -3,6 +3,7 @@ import type { Me, PublicUser, Role, TimeFormat } from "@production-line/shared";
 import { withTransaction } from "../db/connection.js";
 import { HttpError } from "../errors.js";
 import type { AppEvents } from "../events.js";
+import type { SlotsService } from "./slots.js";
 
 export interface UserRow {
   id: number;
@@ -68,6 +69,7 @@ export class UsersService {
   constructor(
     private readonly db: DatabaseSync,
     private readonly events: AppEvents,
+    private readonly slots: SlotsService,
   ) {
     this.byId = db.prepare("SELECT * FROM users WHERE id = :id");
     this.byUsername = db.prepare("SELECT * FROM users WHERE username = :username COLLATE NOCASE");
@@ -170,15 +172,19 @@ export class UsersService {
       throw new HttpError(403, "owner_immutable", "the Owner cannot be deleted");
 
     const count = (sql: string) => (this.db.prepare(sql).get({ id }) as { n: number }).n;
+    const affectedSlots = this.slots.listByUser(id);
     const cascaded = withTransaction(this.db, () => {
       const c = {
         sessions: count("SELECT COUNT(*) AS n FROM sessions WHERE user_id = :id"),
-        slots: count("SELECT COUNT(*) AS n FROM slots WHERE user_id = :id"),
+        slots: affectedSlots.length,
         images: count("SELECT COUNT(*) AS n FROM images WHERE uploader_id = :id"),
       };
+      // FK cascades remove sessions, slots, slot_printers, and image rows.
       this.deleteStmt.run({ id });
       return c;
     });
+    // Each cascaded slot goes through the same cleanup/event path as a manual delete (§3.1).
+    for (const slot of affectedSlots) this.slots.notifyCascaded(slot, "user_deleted");
     const user = toPublicUser(row);
     this.events.emit("user.deleted", { user });
     return { user, cascaded };

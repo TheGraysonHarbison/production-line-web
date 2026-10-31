@@ -8,6 +8,7 @@ import { AppEvents } from "./events.js";
 import { PrintersService } from "./services/printers.js";
 import { SessionsService } from "./services/sessions.js";
 import { SettingsService } from "./services/settings.js";
+import { SlotsService } from "./services/slots.js";
 import { UsersService } from "./services/users.js";
 
 /** Everything the routes and services need, built once at startup. */
@@ -20,6 +21,7 @@ export interface AppContext {
   users: UsersService;
   sessions: SessionsService;
   printers: PrintersService;
+  slots: SlotsService;
   log: Logger;
 }
 
@@ -45,13 +47,14 @@ export function createContext(config: Config, log: Logger): AppContext {
   const settings = new SettingsService(db, dataDir.secretKey, events);
   settings.seedDefaults();
 
-  const users = new UsersService(db, events);
-  const sessions = new SessionsService(db);
   const printers = new PrintersService(db, events);
+  const slots = new SlotsService(db, events);
+  const users = new UsersService(db, events, slots);
+  const sessions = new SessionsService(db);
   const purged = sessions.purgeExpired();
   if (purged > 0) log.info({ purged }, "sessions.purged");
 
-  return { config, dataDir, db, events, settings, users, sessions, printers, log };
+  return { config, dataDir, db, events, settings, users, sessions, printers, slots, log };
 }
 
 export function closeContext(ctx: AppContext): void {
