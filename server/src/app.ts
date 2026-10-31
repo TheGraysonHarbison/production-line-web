@@ -15,6 +15,7 @@ import { metaRoutes } from "./routes/meta.js";
 import { printersRoutes } from "./routes/printers.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { setupRoutes } from "./routes/setup.js";
+import { slotsRoutes } from "./routes/slots.js";
 import { usersRoutes } from "./routes/users.js";
 
 declare module "fastify" {
@@ -72,6 +73,7 @@ export async function buildApp(options: BuildAppOptions) {
       await api.register(usersRoutes);
       await api.register(printersRoutes);
       await api.register(settingsRoutes);
+      await api.register(slotsRoutes);
     },
     { prefix: "/api" },
   );

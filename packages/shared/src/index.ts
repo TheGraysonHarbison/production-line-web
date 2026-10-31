@@ -5,3 +5,5 @@ export * from "./errors.js";
 export * from "./meta.js";
 export * from "./printers.js";
 export * from "./settings.js";
+export * from "./slots.js";
+export * from "./time.js";

@@ -1,7 +1,8 @@
 import fastifyCookie from "@fastify/cookie";
-import type { Role } from "@production-line/shared";
+import { IdSchema, type Role, type Slot } from "@production-line/shared";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
+import { z } from "zod";
 import { forbidden, unauthorized } from "../errors.js";
 import type { SessionRow } from "../services/sessions.js";
 import { roleSatisfies, type UserRow } from "../services/users.js";
@@ -13,6 +14,8 @@ declare module "fastify" {
   interface FastifyRequest {
     user: UserRow | null;
     session: SessionRow | null;
+    /** Set by requireSlotAccess(). */
+    slot: Slot | null;
   }
   interface FastifyReply {
     startSession(userId: number): void;
@@ -31,6 +34,7 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 
   app.decorateRequest("user", null);
   app.decorateRequest("session", null);
+  app.decorateRequest("slot", null);
 
   app.decorateReply("startSession", function (this: FastifyReply, userId: number) {
     const session = app.ctx.sessions.create(userId);
@@ -79,10 +83,20 @@ export function requireRole(role: Role) {
   };
 }
 
+const SlotParams = z.object({ id: z.coerce.number().pipe(IdSchema) });
+
 /**
- * Slot access (owner of the slot, Admin, or Owner). Real check lands with slots in Phase 4;
- * until then it only enforces authentication so the signature is stable.
+ * preHandler factory for /api/slots/:id mutations (dev doc §3.3): the slot's user, Admins, and the
+ * Owner may proceed; everyone else gets 403. Loads the slot onto `request.slot` (404 if missing).
  */
 export function requireSlotAccess() {
-  return requireAuth;
+  return async (request: FastifyRequest): Promise<void> => {
+    if (!request.user) throw unauthorized();
+    const { id } = SlotParams.parse(request.params);
+    const slot = request.server.ctx.slots.get(id);
+    const allowed = slot.user.id === request.user.id || roleSatisfies(request.user.role, "admin");
+    if (!allowed)
+      throw forbidden("not_slot_owner", "only the slot's owner or an admin may change it");
+    request.slot = slot;
+  };
 }

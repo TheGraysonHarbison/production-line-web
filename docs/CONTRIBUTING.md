@@ -45,6 +45,12 @@ On a host where `localhost` resolves to IPv6 first, test with `http://127.0.0.1:
 - Errors are JSON: `{ error: "<code>", message?, issues? }`. Zod failures are `400 validation` with per-field `issues`; `401 unauthorized`, `403 <reason>`, `404 <thing>_not_found`, `409 <conflict>`, `429 rate_limited`.
 - Validation schemas live in `packages/shared` and are parsed in the route handler (`Schema.parse(request.body)`); never re-implement the rules in the client.
 
+## Slots
+
+- The server is the only authority on conflicts. Clients may pre-filter printers for a range, but every create/update runs the per-printer overlap query inside a `BEGIN IMMEDIATE` transaction and answers `409 conflict` with the blocking slot per printer.
+- Times are rounded to the nearest 5 minutes on the server, so a client may send "now". Rules: start not before the current 5-minute mark, end after start, at least 5 minutes, end within 30 days. A running slot's start is locked; its end may be extended up to the next slot on each of its printers.
+- Deleting a slot goes through `SlotsService.delete(id, reason)` (`manual` | `expired` | `user_deleted`); later phases register cleanup hooks there with `onDelete()`.
+
 ## Rules
 
 - Zero native Node addons at runtime. The production dependency tree (`npm ls --omit=dev -w server`) must be pure JavaScript. Check any new dependency for a `binding.gyp` or install-time compile step before adding it.
