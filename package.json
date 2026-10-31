@@ -1,0 +1,35 @@
+{
+  "name": "production-line-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Self-hosted, LAN-only scheduling app for shared 3D printers",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "workspaces": [
+    "packages/shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run build -w packages/shared && concurrently -n shared,server,client -c blue,green,magenta \"npm run dev -w packages/shared\" \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w packages/shared && npm run build -w client && node scripts/copy-client.mjs && npm run build -w server",
+    "start": "node server/dist/index.js",
+    "pretest": "npm run build -w packages/shared",
+    "test": "vitest run --project shared --project server --project client",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "npm run build -w packages/shared && tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit",
+    "db:migrate": "node scripts/db-migrate.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@playwright/test": "1.64.1",
+    "concurrently": "10.0.6",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

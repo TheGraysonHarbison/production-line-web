@@ -1,0 +1,23 @@
+{
+  "name": "@production-line/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.8",
+    "@production-line/shared": "*",
+    "fastify": "5.12.7",
+    "pino": "10.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "pino-pretty": "13.2.0",
+    "tsx": "4.23.15"
+  }
+}
