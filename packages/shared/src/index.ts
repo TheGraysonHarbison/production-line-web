@@ -3,4 +3,5 @@ export * from "./common.js";
 export * from "./entities.js";
 export * from "./errors.js";
 export * from "./meta.js";
+export * from "./printers.js";
 export * from "./settings.js";

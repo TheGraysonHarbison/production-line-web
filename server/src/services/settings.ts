@@ -4,6 +4,9 @@ import { withTransaction } from "../db/connection.js";
 import type { AppEvents } from "../events.js";
 import { decryptSecret, encryptSecret } from "./crypto.js";
 
+/** Partial update where omitted and `undefined` keys are both "leave unchanged". */
+export type SettingsPatch = { [K in keyof SettingsValues]?: SettingsValues[K] | undefined };
+
 /** Plaintext view of every setting. `ha_token` here is the real token; never send this to clients. */
 export interface SettingsValues {
   registration_enabled: boolean;
@@ -95,8 +98,8 @@ export class SettingsService {
    * Writes the given keys in one transaction and emits `settings.updated` with the key names.
    * `null` for a nullable key clears it (`ha_token: null` forgets the token).
    */
-  update(patch: Partial<SettingsValues>): PublicSettings {
-    const keys = Object.keys(patch) as SettingKey[];
+  update(patch: SettingsPatch): PublicSettings {
+    const keys = (Object.keys(patch) as SettingKey[]).filter((k) => patch[k] !== undefined);
     if (keys.length === 0) return this.get();
 
     const updated_at = new Date().toISOString();

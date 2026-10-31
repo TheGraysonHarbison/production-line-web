@@ -12,6 +12,8 @@ import setupRedirectPlugin from "./plugins/setup-redirect.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { metaRoutes } from "./routes/meta.js";
+import { printersRoutes } from "./routes/printers.js";
+import { settingsRoutes } from "./routes/settings.js";
 import { setupRoutes } from "./routes/setup.js";
 import { usersRoutes } from "./routes/users.js";
 
@@ -68,6 +70,8 @@ export async function buildApp(options: BuildAppOptions) {
       await api.register(authRoutes);
       await api.register(meRoutes);
       await api.register(usersRoutes);
+      await api.register(printersRoutes);
+      await api.register(settingsRoutes);
     },
     { prefix: "/api" },
   );

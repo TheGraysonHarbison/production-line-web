@@ -11,7 +11,7 @@ const viewport = (name: string, use: Record<string, unknown>) => ({
   name,
   use: { ...devices["Desktop Chrome"], ...use },
   dependencies: ["setup"],
-  testIgnore: /setup\.spec\.ts/,
+  testIgnore: /(setup|admin)\.spec\.ts/,
 });
 
 export default defineConfig({
@@ -31,6 +31,14 @@ export default defineConfig({
     viewport("desktop", { viewport: { width: 1280, height: 800 } }),
     viewport("tablet", { viewport: { width: 768, height: 1024 }, hasTouch: true }),
     viewport("mobile", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }),
+    // Admin flows mutate global state (registration toggle, timezone), so they run alone, afterwards.
+    {
+      name: "admin",
+      testMatch: /admin\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      dependencies: ["desktop", "tablet", "mobile"],
+      fullyParallel: false,
+    },
   ],
   webServer: {
     command: "npm run start",
