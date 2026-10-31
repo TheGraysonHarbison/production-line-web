@@ -1,0 +1,47 @@
+import type { DatabaseSync } from "node:sqlite";
+import type { Logger } from "pino";
+import type { Config } from "./config.js";
+import { bootstrapDataDir, type DataDir } from "./data-dir.js";
+import { openDatabase } from "./db/connection.js";
+import { migrate } from "./db/migrate.js";
+import { AppEvents } from "./events.js";
+import { SettingsService } from "./services/settings.js";
+
+/** Everything the routes and services need, built once at startup. */
+export interface AppContext {
+  config: Config;
+  dataDir: DataDir;
+  db: DatabaseSync;
+  events: AppEvents;
+  settings: SettingsService;
+  log: Logger;
+}
+
+/**
+ * Boot sequence: data dir → secret key → database → migrations → defaults.
+ * Fails fast on any problem so a broken install never serves requests.
+ */
+export function createContext(config: Config, log: Logger): AppContext {
+  const dataDir = bootstrapDataDir(config.dataDir);
+  for (const w of bootstrapDataDir.warnings.splice(0)) {
+    log.warn({ dataDir: dataDir.root }, w);
+  }
+
+  const db = openDatabase(dataDir.dbPath);
+  const migration = migrate(db);
+  if (migration.applied.length > 0) {
+    log.info({ applied: migration.applied, version: migration.current }, "db.migrated");
+  } else {
+    log.debug({ version: migration.current }, "db.up_to_date");
+  }
+
+  const events = new AppEvents();
+  const settings = new SettingsService(db, dataDir.secretKey, events);
+  settings.seedDefaults();
+
+  return { config, dataDir, db, events, settings, log };
+}
+
+export function closeContext(ctx: AppContext): void {
+  ctx.db.close();
+}

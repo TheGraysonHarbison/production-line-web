@@ -23,7 +23,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "npm run build -w packages/shared && tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit",
-    "db:migrate": "node scripts/db-migrate.mjs"
+    "db:migrate": "node server/dist/db/migrate-cli.js"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

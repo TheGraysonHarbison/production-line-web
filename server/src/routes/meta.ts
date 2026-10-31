@@ -3,16 +3,19 @@ import type { FastifyPluginAsync } from "fastify";
 
 /**
  * GET /api/meta — public metadata and health check (dev doc §7, §17).
- * Phase 0 returns static values; Phase 1 reads them from the database.
+ * `timezone` falls back to UTC until first-boot setup records the real one.
  */
 export const metaRoutes: FastifyPluginAsync = async (app) => {
-  app.get(
-    "/meta",
-    async (): Promise<Meta> => ({
-      setup_required: true,
-      registration_enabled: true,
-      images_enabled: false,
-      timezone: "UTC",
-    }),
-  );
+  const countUsers = app.ctx.db.prepare("SELECT COUNT(*) AS n FROM users");
+
+  app.get("/meta", async (): Promise<Meta> => {
+    const { n } = countUsers.get() as { n: number };
+    const settings = app.ctx.settings.get();
+    return {
+      setup_required: n === 0,
+      registration_enabled: settings.registration_enabled,
+      images_enabled: settings.images_enabled,
+      timezone: settings.timezone ?? "UTC",
+    };
+  });
 };

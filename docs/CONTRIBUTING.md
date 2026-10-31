@@ -32,6 +32,12 @@ podman run --rm -p 8080:8080 -v plw-data:/data production-line-web:dev
 
 On a host where `localhost` resolves to IPv6 first, test with `http://127.0.0.1:8080` since rootless Podman maps IPv4 by default.
 
+## Database and migrations
+
+- SQLite via `node:sqlite`, one file at `$DATA_DIR/app.db`, WAL mode. Every connection sets `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`.
+- Migrations are numbered SQL files in `server/migrations/` (`0002_short_name.sql`). They run automatically on server start and via `npm run db:migrate` (built) or `npm run db:migrate -w server` (from source). Each file runs in its own transaction and is recorded in `schema_migrations`. Forward-only: never edit a shipped migration; add a new one.
+- `secret.key` in `$DATA_DIR` is the AES-256-GCM key for secrets at rest (the Home Assistant token). Losing it only means re-entering that token.
+
 ## Rules
 
 - Zero native Node addons at runtime. The production dependency tree (`npm ls --omit=dev -w server`) must be pure JavaScript. Check any new dependency for a `binding.gyp` or install-time compile step before adding it.
