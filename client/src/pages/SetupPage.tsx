@@ -38,7 +38,7 @@ export function SetupPage() {
   };
 
   return (
-    <AuthLayout title="Welcome! Create the Owner account">
+    <AuthLayout title="Welcome! Create the Owner account" color={color}>
       <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
         <Field label="Username" htmlFor="username" error={err?.fieldMessage("username")}>
           <input
@@ -75,17 +75,17 @@ export function SetupPage() {
           <input
             id="color"
             type="color"
-            className="h-10 w-20 cursor-pointer rounded-md"
+            className="h-11 w-20 cursor-pointer rounded-lg border border-line-strong bg-transparent p-1"
             value={color}
             onChange={(e) => setColor(e.target.value)}
           />
         </Field>
-        <p className="text-sm opacity-70">
+        <p className="text-ink-muted text-sm">
           Detected timezone: <span data-testid="detected-timezone">{timezone}</span>. Admins can
           change this later.
         </p>
         {err && !err.body.issues ? (
-          <p className="text-red-600 text-sm dark:text-red-400" role="alert">
+          <p className="text-danger text-sm" role="alert">
             {err.message}
           </p>
         ) : null}

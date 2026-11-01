@@ -10,6 +10,17 @@ async function register(page: Page, username: string) {
   await expect(page.getByTestId("current-username")).toHaveText(username);
 }
 
+/** The printer list lives in the dock (desktop), a drawer (tablet), or the Printers tab (mobile). */
+async function showPrinters(page: Page) {
+  const width = await page.evaluate(() => window.innerWidth);
+  if (width >= 1024) return;
+  if (width >= 768) {
+    await page.getByTestId("open-printers").click();
+    return;
+  }
+  await page.goto("/printers");
+}
+
 async function signInAsOwner(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Username").fill("owner");
@@ -36,6 +47,7 @@ test("changes made in one browser appear live in another, without a reload", asy
   await page.goto("/settings/printers");
   await page.getByLabel("Printer name").fill(printerName);
   await page.getByRole("button", { name: "Add printer" }).click();
+  await showPrinters(watcher);
   await expect(watcher.getByTestId("dock-printers")).toContainText(printerName);
 
   // A slot created through the API (no browser involved) shows up in both.

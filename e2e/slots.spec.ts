@@ -35,22 +35,47 @@ async function tomorrowWindow(page: Page) {
 }
 
 /**
- * Pixel x inside a lane track for a wall-clock time, read off the rendered hour ticks so DST days
- * (23/25 hours) work: `label` is a tick label like "10 AM", `plusMinutes` an offset from it.
+ * Pixel x inside a lane track for a wall-clock time on `date`, read off the rendered hour ticks so
+ * DST days (23/25 hours) work: `label` is a tick label like "10 AM", `plusMinutes` an offset from
+ * it. The strip spans many days, so the tick is picked by its date as well as its label.
  */
-async function xFor(page: Page, trackBox: { x: number }, label: string, plusMinutes = 0) {
+async function xFor(
+  page: Page,
+  trackBox: { x: number },
+  date: string,
+  label: string,
+  plusMinutes = 0,
+) {
   const tick = page
-    .getByTestId("tick")
+    .locator(`[data-testid="tick"][data-date="${date}"]`)
     .filter({ hasText: new RegExp(`^${label}$`) })
     .first();
   const left = await tick.evaluate((el) => Number.parseFloat((el as HTMLElement).style.left));
   return trackBox.x + left + plusMinutes * PX_PER_MINUTE + 1;
 }
 
+/** Waits for a smooth scroll (Next day, Now) to come to rest before measuring positions. */
+async function settleScroll(page: Page) {
+  const timeline = page.getByTestId("timeline");
+  await expect
+    .poll(async () => {
+      const a = await timeline.evaluate((el) => el.scrollLeft + el.scrollTop);
+      await new Promise((r) => setTimeout(r, 150));
+      const b = await timeline.evaluate((el) => el.scrollLeft + el.scrollTop);
+      return a === b;
+    })
+    .toBe(true);
+}
+
+/** The track's viewport box; its left edge is far off-screen once the strip is scrolled. */
+async function trackBox(track: ReturnType<Page["getByTestId"]>) {
+  return (await track.boundingBox()) as { x: number; y: number; width: number; height: number };
+}
+
 test.describe("desktop scheduling", () => {
   test.skip(
     ({ isMobile, viewport }) => isMobile || (viewport?.width ?? 0) < 1024,
-    "desktop only until Phase 7",
+    "desktop pointer interactions; touch layouts are covered in responsive.spec.ts",
   );
 
   test("create by drag, edit, see a 409 surfaced, resize by drag, and delete", async ({
@@ -74,24 +99,37 @@ test.describe("desktop scheduling", () => {
     await expect(watcher.getByTestId("stream-status")).toHaveAttribute("data-status", "live");
 
     await page.goto(`/day/${date}`);
+    // The strip opens scrolled to the requested day: its midnight marker is on screen and the
+    // heading names it.
+    await expect(
+      page.locator(`[data-testid="tick"][data-date="${date}"][data-day-start]`),
+    ).toBeInViewport();
+    await expect(page.getByTestId("day-heading")).toHaveText(
+      new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(new Date(`${date}T00:00:00Z`)),
+    );
     const lane = page
       .getByTestId("lane")
       .filter({ has: page.getByText(printer.name, { exact: true }) });
     const track = lane.getByTestId("lane-track");
     // The dock settles its width after first paint, so measure right before each drag.
     const measure = async () => {
-      await track.scrollIntoViewIfNeeded();
       await expect(page.getByTestId("dock-printers")).toContainText(printer.name);
-      return (await track.boundingBox()) as { x: number; y: number; width: number; height: number };
+      return trackBox(track);
     };
     let box = await measure();
     const y = box.y + box.height / 2;
 
     // Drag 06:00 → 08:00 on the printer's lane (morning hours fit inside the 1280px viewport).
-    await page.mouse.move(await xFor(page, box, "6 AM"), y);
+    await page.mouse.move(await xFor(page, box, date, "6 AM"), y);
     await page.mouse.down();
-    await page.mouse.move(await xFor(page, box, "7 AM"), y, { steps: 4 });
-    await page.mouse.move(await xFor(page, box, "8 AM"), y, { steps: 4 });
+    await page.mouse.move(await xFor(page, box, date, "7 AM"), y, { steps: 4 });
+    await page.mouse.move(await xFor(page, box, date, "8 AM"), y, { steps: 4 });
     await page.mouse.up();
 
     const dialog = page.getByRole("dialog");
@@ -192,8 +230,8 @@ test.describe("desktop scheduling", () => {
     };
     await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
     await page.mouse.down();
-    await page.mouse.move(await xFor(page, box, "8 AM", 15), y, { steps: 5 });
-    await page.mouse.move(await xFor(page, box, "8 AM", 30), y, { steps: 5 });
+    await page.mouse.move(await xFor(page, box, date, "8 AM", 15), y, { steps: 5 });
+    await page.mouse.move(await xFor(page, box, date, "8 AM", 30), y, { steps: 5 });
     await page.mouse.up();
     await page
       .getByTestId("slot-card")
@@ -201,6 +239,54 @@ test.describe("desktop scheduling", () => {
       .first()
       .click();
     await expect(dialog.getByLabel("End time")).toHaveValue("08:30");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+
+    // Drag the left edge from 06:00 to 05:30.
+    box = await measure();
+    const startHandle = lane.getByTestId("resize-start-handle").first();
+    const sh = (await startHandle.boundingBox()) as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    await page.mouse.move(sh.x + sh.width / 2, sh.y + sh.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(await xFor(page, box, date, "5 AM", 45), y, { steps: 5 });
+    await page.mouse.move(await xFor(page, box, date, "5 AM", 30), y, { steps: 5 });
+    await page.mouse.up();
+    const ourCard = page
+      .getByTestId("slot-card")
+      .filter({ hasText: `${slotName}-v2` })
+      .first();
+    await expect.poll(async () => (await ourCard.getAttribute("title")) ?? "").toMatch(/5:30/);
+    await ourCard.click();
+    await expect(dialog.getByLabel("Start time")).toHaveValue("05:30");
+    await expect(dialog.getByLabel("End time")).toHaveValue("08:30");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+
+    // Drag the card body half an hour earlier: 05:30–08:30 → 05:00–08:00 (later would hit the
+    // 09:00 booking and be refused). A plain click still opens it.
+    box = await measure();
+    const cb = (await ourCard.boundingBox()) as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    const grabX = cb.x + cb.width / 2;
+    await page.mouse.move(grabX, cb.y + cb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grabX - 15 * PX_PER_MINUTE, y, { steps: 5 });
+    await page.mouse.move(grabX - 30 * PX_PER_MINUTE, y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(async () => (await ourCard.getAttribute("title")) ?? "").toMatch(/5:00 AM/);
+    await ourCard.click();
+    await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
+    await expect(dialog.getByLabel("Start time")).toHaveValue("05:00");
+    await expect(dialog.getByLabel("End time")).toHaveValue("08:00");
 
     // Delete from the editor.
     await dialog.getByRole("button", { name: "Delete" }).click();
@@ -215,7 +301,10 @@ test.describe("desktop scheduling", () => {
     await watcher.context().close();
   });
 
-  test("a running slot keeps its start locked and can be extended", async ({ page, baseURL }) => {
+  test("a running slot has no start handle and cannot be dragged, but opens on click", async ({
+    page,
+    baseURL,
+  }) => {
     await signInAsOwner(page);
     const printer = await addPrinter(page, `Run-${suffix()}`, baseURL as string);
     const floorNow = new Date(Math.floor(Date.now() / 300_000) * 300_000);
@@ -242,7 +331,13 @@ test.describe("desktop scheduling", () => {
     await page.goto(`/day/${date}`);
     const card = page.getByTestId("slot-card").filter({ hasText: name });
     await expect(card).toHaveAttribute("data-running", "true");
-    await expect(page.getByTestId("now-line").first()).toBeVisible();
+    // Today opens a little before now: the current-time line is on screen without scrolling.
+    await expect(page.getByTestId("now-line").first()).toBeInViewport();
+    const lane = page
+      .getByTestId("lane")
+      .filter({ has: page.getByText(printer.name, { exact: true }) });
+    await expect(lane.getByTestId("resize-handle")).toHaveCount(1);
+    await expect(lane.getByTestId("resize-start-handle")).toHaveCount(0);
     await card.click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByLabel("Start time")).toBeDisabled();
@@ -256,6 +351,101 @@ test.describe("desktop scheduling", () => {
     await expect(dialog).toBeHidden();
     const detail = await (await page.request.get(`/api/slots/${(await created.json()).id}`)).json();
     expect(Date.parse(detail.end_at) - end.getTime()).toBe(30 * 60_000);
+  });
+
+  test("the strip scrolls across days, Now returns to the present, and drags stop at now", async ({
+    page,
+    baseURL,
+  }) => {
+    // Jumps honour reduced motion by scrolling instantly, which keeps positions deterministic.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await signInAsOwner(page);
+    const printer = await addPrinter(page, `Clamp-${suffix()}`, baseURL as string);
+    const meta = await (await page.request.get("/api/meta")).json();
+    const dateOf = (d: Date) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: meta.timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(d);
+    const today = dateOf(new Date());
+    await page.goto(`/day/${today}`);
+    const nowLine = page.getByTestId("now-line").first();
+    await expect(nowLine).toBeInViewport();
+    const heading = page.getByTestId("day-heading");
+    const todayText = await heading.textContent();
+
+    // Next day scrolls the same strip to tomorrow's midnight marker; the heading follows.
+    const tomorrow = dateOf(new Date(Date.now() + 24 * 3_600_000));
+    await page.getByRole("button", { name: "Next day" }).click();
+    await expect(
+      page.locator(`[data-testid="tick"][data-date="${tomorrow}"][data-day-start]`),
+    ).toBeInViewport();
+    await expect(heading).not.toHaveText(todayText ?? "");
+    await expect(nowLine).not.toBeInViewport();
+    await expect(page).toHaveURL(new RegExp(`/day/${tomorrow}$`));
+    await settleScroll(page);
+
+    // The far end of the strip is the booking horizon; the last day there is hatched past it.
+    const horizonDay = dateOf(new Date(Date.now() + 30 * 24 * 3_600_000));
+    await page.getByTestId("timeline").evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    await expect(
+      page.locator(`[data-testid="tick"][data-date="${horizonDay}"]`).last(),
+    ).toBeInViewport();
+    await expect(page.getByTestId("hatch-horizon").first()).toBeInViewport();
+
+    // Now brings the present back on screen.
+    await page.getByTestId("jump-now").click();
+    await expect(nowLine).toBeInViewport();
+    await expect(heading).toHaveText(todayText ?? "");
+    await settleScroll(page);
+
+    // A drag that starts 90 minutes ahead and is pulled back into the past stops at now.
+    const lane = page
+      .getByTestId("lane")
+      .filter({ has: page.getByText(printer.name, { exact: true }) });
+    const track = lane.getByTestId("lane-track");
+    await expect(page.getByTestId("dock-printers")).toContainText(printer.name);
+    const box = await trackBox(track);
+    const nowLeft = await lane
+      .getByTestId("now-line")
+      .evaluate((el) => Number.parseFloat((el as HTMLElement).style.left));
+    const y = box.y + box.height / 2;
+    const before = Date.now();
+    await page.mouse.move(box.x + nowLeft + 90 * PX_PER_MINUTE, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + nowLeft - 30 * PX_PER_MINUTE, y, { steps: 5 });
+    await page.mouse.move(box.x + nowLeft - 90 * PX_PER_MINUTE, y, { steps: 5 });
+    await page.mouse.up();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "New slot" })).toBeVisible();
+    const slotName = `Clamped-${suffix()}`;
+    await dialog.getByLabel("Name").fill(slotName);
+    await dialog.getByRole("button", { name: "Create slot" }).click();
+    await expect(dialog).toBeHidden();
+    const list = (await (
+      await page.request.get(
+        `/api/slots?from=${new Date(before - 3_600_000).toISOString()}&to=${new Date(
+          before + 3 * 3_600_000,
+        ).toISOString()}`,
+      )
+    ).json()) as { name: string; start_at: string; end_at: string }[];
+    const made = list.find((s) => s.name === slotName);
+    expect(made).toBeTruthy();
+    const start = Date.parse(made?.start_at ?? "");
+    // Clamped to the first 5-minute mark not yet past, never into the hatched past.
+    expect(start).toBeGreaterThanOrEqual(Math.floor(before / 300_000) * 300_000);
+    expect(start).toBeLessThanOrEqual(Date.now() + 5 * 60_000);
+    expect(Date.parse(made?.end_at ?? "") - start).toBeGreaterThanOrEqual(80 * 60_000);
+
+    // Pressing in the hatched past does nothing. (Now leaves 30 minutes of past on screen; further
+    // left is the pinned printer label.)
+    await page.mouse.click(box.x + nowLeft - 20 * PX_PER_MINUTE, y);
+    await page.waitForTimeout(300);
+    await expect(dialog).toBeHidden();
   });
 
   test("the month calendar shows a bar for the booking and opens the day", async ({

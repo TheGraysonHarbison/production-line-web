@@ -2,7 +2,7 @@ import type { Me } from "@production-line/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { buttonClass, Field, inputClass } from "../components/Field.tsx";
+import { buttonClass, Field, inputClass, linkButtonClass } from "../components/Field.tsx";
 import { ApiError, api } from "../lib/api.ts";
 import { meQueryKey, useMeta } from "../lib/auth.tsx";
 import { AuthLayout } from "./AuthLayout.tsx";
@@ -30,8 +30,10 @@ export function RegisterPage() {
   if (meta.data && !meta.data.registration_enabled) {
     return (
       <AuthLayout title="Registration is closed">
-        <p className="text-sm opacity-80">Ask the Owner to enable registration, then try again.</p>
-        <Link to="/login" className="underline">
+        <p className="text-ink-muted text-sm">
+          Ask the Owner to enable registration, then try again.
+        </p>
+        <Link to="/login" className={linkButtonClass}>
           Back to sign in
         </Link>
       </AuthLayout>
@@ -54,7 +56,7 @@ export function RegisterPage() {
   };
 
   return (
-    <AuthLayout title="Create your account">
+    <AuthLayout title="Create your account" color={color}>
       <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
         <Field label="Username" htmlFor="username" error={err?.fieldMessage("username")}>
           <input
@@ -86,13 +88,13 @@ export function RegisterPage() {
           <input
             id="color"
             type="color"
-            className="h-10 w-20 cursor-pointer rounded-md"
+            className="h-11 w-20 cursor-pointer rounded-lg border border-line-strong bg-transparent p-1"
             value={color}
             onChange={(e) => setColor(e.target.value)}
           />
         </Field>
         {general ? (
-          <p className="text-red-600 text-sm dark:text-red-400" role="alert">
+          <p className="text-danger text-sm" role="alert">
             {general}
           </p>
         ) : null}
@@ -102,7 +104,7 @@ export function RegisterPage() {
       </form>
       <p className="text-sm">
         Already have an account?{" "}
-        <Link to="/login" className="underline">
+        <Link to="/login" className={linkButtonClass}>
           Sign in
         </Link>
       </p>

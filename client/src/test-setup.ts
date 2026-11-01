@@ -28,3 +28,17 @@ class FakeEventSource extends EventTarget {
 if (typeof globalThis.EventSource === "undefined") {
   (globalThis as unknown as { EventSource: typeof FakeEventSource }).EventSource = FakeEventSource;
 }
+
+// jsdom has no matchMedia; the viewport hook needs one. Default to a desktop-sized, light window.
+if (typeof window.matchMedia !== "function") {
+  window.matchMedia = (query: string): MediaQueryList => ({
+    matches: /min-width/.test(query),
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  });
+}

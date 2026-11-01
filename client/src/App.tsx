@@ -3,6 +3,7 @@ import { PublicOnly, RequireAuth, SetupOnly } from "./components/Guards.tsx";
 import { CalendarPage } from "./pages/CalendarPage.tsx";
 import { DayPage } from "./pages/DayPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
+import { PrinterStatusPage } from "./pages/PrinterStatusPage.tsx";
 import { ProfilePage } from "./pages/ProfilePage.tsx";
 import { RegisterPage } from "./pages/RegisterPage.tsx";
 import { SetupPage } from "./pages/SetupPage.tsx";
@@ -49,6 +50,7 @@ export function App() {
       >
         <Route index element={<CalendarPage />} />
         <Route path="/day/:date" element={<DayPage />} />
+        <Route path="/printers" element={<PrinterStatusPage />} />
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="/settings/profile" replace />} />
           <Route path="profile" element={<ProfilePage />} />

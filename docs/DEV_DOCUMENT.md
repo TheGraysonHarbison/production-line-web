@@ -404,7 +404,7 @@ Setup steps for the end user (goes in the README): create a long-lived access to
 ### 11.2 Views
 
 - **Calendar (month):** days show stacked color bars per user with slots; tap → timeline.
-- **Timeline (day):** one lane per visible printer, horizontal on desktop, vertical on mobile; slots render as glass cards tinted by their user's color; drag-to-create and drag-to-resize snap to 5 minutes. Unavailable ranges render hatched.
+- **Timeline (strip):** one lane per visible printer, horizontal on desktop, vertical on mobile. The strip is continuous: it starts on the hour at least an hour before now (or at the start of an earlier day opened from the calendar) and runs to the end of the day the 30-day booking horizon falls on, with date markers at each midnight and the printer labels pinned while it scrolls. `/day/:date` opens the strip scrolled to that day; Previous/Next day step the scroll, and a **Now** button returns to the current time. Slots render as glass cards tinted by their user's color; drag-to-create, drag either edge, and drag-to-move snap to 5 minutes and are clamped to the bookable window (never before the current 5-minute mark, never past the horizon). The past, the time beyond the horizon, and invisible printers render hatched; a press in a hatched area does nothing.
 - **Slot editor:** name, description, start/end pickers (5-minute steps), printer multi-select (printers conflicting with the chosen range are disabled with a tooltip showing who has them), images (when enabled).
 - **Settings:** Profile (color picker, avatar, time format, password) · Printers (admin) · General (admin) · Home Assistant (admin) · Users (owner) · Backup (admin).
 

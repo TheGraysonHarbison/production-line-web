@@ -1,6 +1,12 @@
 import type { Printer } from "@production-line/shared";
 import { type FormEvent, useState } from "react";
-import { buttonClass, Field, inputClass } from "../../components/Field.tsx";
+import {
+  buttonClass,
+  Field,
+  inputClass,
+  linkButtonClass,
+  secondaryButtonClass,
+} from "../../components/Field.tsx";
 import { ErrorNotice } from "../../components/Notice.tsx";
 import { usePrinterMutations, usePrinters } from "../../lib/data.ts";
 
@@ -22,12 +28,12 @@ function PrinterRow({ printer }: { printer: Printer }) {
 
   return (
     <li
-      className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800"
+      className="flex flex-col gap-2 rounded-xl border border-line bg-canvas/40 p-3"
       data-testid="printer-row"
     >
       <div className="flex flex-wrap items-center gap-3">
         {editing ? (
-          <form onSubmit={rename} className="flex items-center gap-2">
+          <form onSubmit={rename} className="flex flex-wrap items-center gap-2">
             <input
               aria-label={`Rename ${printer.name}`}
               className={inputClass}
@@ -37,7 +43,7 @@ function PrinterRow({ printer }: { printer: Printer }) {
             <button type="submit" className={buttonClass} disabled={update.isPending}>
               Save
             </button>
-            <button type="button" className="text-sm underline" onClick={() => setEditing(false)}>
+            <button type="button" className={linkButtonClass} onClick={() => setEditing(false)}>
               Cancel
             </button>
           </form>
@@ -47,17 +53,15 @@ function PrinterRow({ printer }: { printer: Printer }) {
           </span>
         )}
         {printer.invisible ? (
-          <span className="rounded bg-neutral-200 px-2 py-0.5 text-xs dark:bg-neutral-800">
-            invisible
-          </span>
+          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs">invisible</span>
         ) : null}
-        <div className="ml-auto flex gap-2 text-sm">
-          <button type="button" className="underline" onClick={() => setEditing(true)}>
+        <div className="ml-auto flex flex-wrap gap-1 text-sm">
+          <button type="button" className={linkButtonClass} onClick={() => setEditing(true)}>
             Rename
           </button>
           <button
             type="button"
-            className="underline"
+            className={linkButtonClass}
             onClick={() => update.mutate({ id: printer.id, invisible: !printer.invisible })}
             disabled={update.isPending}
           >
@@ -65,7 +69,7 @@ function PrinterRow({ printer }: { printer: Printer }) {
           </button>
           <button
             type="button"
-            className="text-red-700 underline dark:text-red-400"
+            className={`${linkButtonClass} text-danger hover:text-danger`}
             onClick={() => {
               if (window.confirm(`Delete printer "${printer.name}"?`)) remove.mutate(printer.id);
             }}
@@ -93,7 +97,7 @@ export function PrintersPage() {
   return (
     <section className="flex flex-col gap-6">
       <h2 className="font-semibold text-2xl">Printers</h2>
-      <p className="text-sm opacity-80">
+      <p className="text-ink-muted text-sm">
         Invisible printers can't be added to new slots but stay on existing ones. A printer that is
         part of any slot can't be deleted.
       </p>
@@ -108,13 +112,19 @@ export function PrintersPage() {
             required
           />
         </Field>
-        <button type="submit" className={buttonClass} disabled={create.isPending || !name.trim()}>
+        <button
+          type="submit"
+          className={secondaryButtonClass}
+          disabled={create.isPending || !name.trim()}
+        >
           Add printer
         </button>
       </form>
       <ErrorNotice error={create.error} map={ERRORS} />
-      {printers.isPending ? <p className="text-sm opacity-70">Loading…</p> : null}
-      {printers.data?.length === 0 ? <p className="text-sm opacity-70">No printers yet.</p> : null}
+      {printers.isPending ? <p className="text-ink-muted text-sm">Loading…</p> : null}
+      {printers.data?.length === 0 ? (
+        <p className="text-ink-muted text-sm">No printers yet.</p>
+      ) : null}
       <ul className="flex flex-col gap-2">
         {printers.data?.map((p) => (
           <PrinterRow key={p.id} printer={p} />
