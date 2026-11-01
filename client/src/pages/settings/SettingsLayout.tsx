@@ -22,24 +22,30 @@ export function SettingsLayout() {
   if (current && RANK[current.role] > rank) return <Navigate to="/settings/profile" replace />;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <div className="mx-auto flex max-w-3xl flex-col gap-5">
       <nav
         aria-label="Settings"
-        className="flex flex-wrap gap-2 border-neutral-200 border-b pb-3 dark:border-neutral-800"
+        className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none]"
       >
         {TABS.filter((t) => RANK[t.role] <= rank).map((t) => (
           <NavLink
             key={t.to}
             to={t.to}
             className={({ isActive }) =>
-              `rounded-md px-3 py-1 text-sm ${isActive ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "opacity-80"}`
+              `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm transition-colors ${
+                isActive
+                  ? "bg-accent font-medium text-on-accent"
+                  : "text-ink-muted hover:bg-accent-soft hover:text-ink"
+              }`
             }
           >
             {t.label}
           </NavLink>
         ))}
       </nav>
-      <Outlet />
+      <div className="glass rounded-2xl p-4 sm:p-6">
+        <Outlet />
+      </div>
     </div>
   );
 }

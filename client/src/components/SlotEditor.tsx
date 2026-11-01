@@ -14,7 +14,16 @@ import {
   isoFromMs,
   snapIsoToFive,
 } from "../lib/time.ts";
-import { buttonClass, Field, inputClass } from "./Field.tsx";
+import {
+  buttonClass,
+  dangerButtonClass,
+  Field,
+  inputClass,
+  linkButtonClass,
+  secondaryButtonClass,
+} from "./Field.tsx";
+import { CloseIcon } from "./Icons.tsx";
+import { errorNoticeClass } from "./Notice.tsx";
 
 const ERROR_TEXT: Record<string, string> = {
   slot_in_past: "The start time is in the past.",
@@ -30,10 +39,11 @@ const ERROR_TEXT: Record<string, string> = {
 
 /**
  * The one slot editor (dev doc §11.2), a native <dialog> so focus trapping and Escape come free.
- * Printers already booked for the chosen range are disabled with a tooltip naming who has them;
- * the server still has the final say and its 409 is shown here.
+ * On phones it becomes a full-screen sheet. Printers already booked for the chosen range are
+ * disabled with a tooltip naming who has them; the server still has the final say and its 409 is
+ * shown here.
  */
-export function SlotEditor() {
+export function SlotEditor({ sheet = false }: { sheet?: boolean }) {
   const editor = useEditor();
   const open = editor.request !== null;
   const ref = useRef<HTMLDialogElement>(null);
@@ -47,17 +57,26 @@ export function SlotEditor() {
     <dialog
       ref={ref}
       onClose={editor.close}
-      className="w-[min(40rem,calc(100vw-2rem))] rounded-lg border border-neutral-200 bg-white p-0 text-neutral-900 backdrop:bg-black/40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+      className={`glass-strong glass-in p-0 text-ink ${
+        sheet
+          ? "m-0 h-dvh max-h-dvh w-screen max-w-none rounded-none border-0"
+          : "w-[min(40rem,calc(100vw-2rem))] rounded-2xl"
+      }`}
       aria-labelledby="slot-editor-title"
+      data-testid="slot-editor"
+      data-sheet={sheet ? "true" : "false"}
     >
       {editor.request ? (
-        <EditorForm key={editor.request.mode === "edit" ? editor.request.slot.id : "new"} />
+        <EditorForm
+          key={editor.request.mode === "edit" ? editor.request.slot.id : "new"}
+          sheet={sheet}
+        />
       ) : null}
     </dialog>
   );
 }
 
-function EditorForm() {
+function EditorForm({ sheet }: { sheet: boolean }) {
   const editor = useEditor();
   const request = editor.request as NonNullable<typeof editor.request>;
   const tz = useTimeZone();
@@ -142,18 +161,35 @@ function EditorForm() {
   const togglePrinter = (id: number) =>
     setPrinterIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   const maxEndIso = isoFromMs(now + SLOT_HORIZON_MS);
+  const title = editing ? (readOnly ? "Slot" : "Edit slot") : "New slot";
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4 p-5" noValidate>
-      <h2 id="slot-editor-title" className="font-semibold text-xl">
-        {editing ? (readOnly ? "Slot" : "Edit slot") : "New slot"}
-      </h2>
-      {editing ? (
-        <p className="text-sm opacity-70">
-          {editing.user.username} · {formatRange(editing.start_at, editing.end_at, tz, fmt)}
-          {running ? " · running" : ""}
-        </p>
-      ) : null}
+    <form
+      onSubmit={submit}
+      className={`flex flex-col gap-4 ${sheet ? "min-h-dvh p-4 pb-6" : "p-5"}`}
+      noValidate
+    >
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 id="slot-editor-title" className="font-semibold text-xl">
+            {title}
+          </h2>
+          {editing ? (
+            <p className="text-ink-muted text-sm">
+              {editing.user.username} · {formatRange(editing.start_at, editing.end_at, tz, fmt)}
+              {running ? " · running" : ""}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-ink-muted hover:bg-accent-soft hover:text-ink"
+          onClick={editor.close}
+          aria-label="Close"
+        >
+          <CloseIcon />
+        </button>
+      </div>
 
       <Field label="Name" htmlFor="slot-name" error={apiError?.fieldMessage("name")}>
         <input
@@ -182,7 +218,7 @@ function EditorForm() {
         />
       </Field>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field
           label="Start"
           htmlFor="slot-start-date"
@@ -192,7 +228,7 @@ function EditorForm() {
             <input
               id="slot-start-date"
               type="date"
-              className={inputClass}
+              className={`${inputClass} min-w-0 flex-1`}
               value={start.date}
               onChange={(e) => setStart({ ...start, date: e.target.value })}
               disabled={readOnly || running}
@@ -202,7 +238,7 @@ function EditorForm() {
               aria-label="Start time"
               type="time"
               step={300}
-              className={inputClass}
+              className={`${inputClass} min-w-0 flex-1`}
               value={start.time}
               onChange={(e) => setStart({ ...start, time: e.target.value })}
               disabled={readOnly || running}
@@ -219,7 +255,7 @@ function EditorForm() {
             <input
               id="slot-end-date"
               type="date"
-              className={inputClass}
+              className={`${inputClass} min-w-0 flex-1`}
               value={end.date}
               onChange={(e) => setEnd({ ...end, date: e.target.value })}
               max={inputsFromIso(maxEndIso, tz).date}
@@ -230,7 +266,7 @@ function EditorForm() {
               aria-label="End time"
               type="time"
               step={300}
-              className={inputClass}
+              className={`${inputClass} min-w-0 flex-1`}
               value={end.time}
               onChange={(e) => setEnd({ ...end, time: e.target.value })}
               disabled={readOnly}
@@ -256,11 +292,12 @@ function EditorForm() {
           return (
             <label
               key={p.id}
-              className={`flex items-center gap-2 rounded-md px-2 py-1 ${disabled ? "opacity-60" : ""} ${blockedByServer ? "bg-red-100 dark:bg-red-900" : ""}`}
+              className={`flex min-h-11 items-center gap-3 rounded-lg px-2 py-1 ${disabled ? "opacity-60" : "hover:bg-accent-soft"} ${blockedByServer ? "bg-danger-soft" : ""}`}
               title={why}
             >
               <input
                 type="checkbox"
+                className="accent-accent"
                 checked={printerIds.includes(p.id)}
                 onChange={() => togglePrinter(p.id)}
                 disabled={disabled}
@@ -268,7 +305,7 @@ function EditorForm() {
               />
               <span>{p.name}</span>
               {why ? (
-                <span id={`why-${p.id}`} className="text-xs opacity-70">
+                <span id={`why-${p.id}`} className="text-ink-muted text-xs">
                   {why}
                 </span>
               ) : null}
@@ -278,10 +315,7 @@ function EditorForm() {
       </fieldset>
 
       {conflict ? (
-        <div
-          className="rounded-md bg-red-100 px-3 py-2 text-red-900 text-sm dark:bg-red-900 dark:text-red-100"
-          role="alert"
-        >
+        <div className={errorNoticeClass} role="alert">
           <p className="font-medium">{conflict.message ?? "Those printers are already booked."}</p>
           <ul className="mt-1 list-disc pl-5">
             {conflict.printers.map((p) => (
@@ -293,24 +327,18 @@ function EditorForm() {
           </ul>
         </div>
       ) : apiError && !apiError.body.issues ? (
-        <p
-          className="rounded-md bg-red-100 px-3 py-2 text-red-900 text-sm dark:bg-red-900 dark:text-red-100"
-          role="alert"
-        >
+        <p className={errorNoticeClass} role="alert">
           {ERROR_TEXT[apiError.code] ?? apiError.message}
         </p>
       ) : apiError?.body.issues &&
         !apiError.fieldMessage("name") &&
         !apiError.fieldMessage("description") ? (
-        <p
-          className="rounded-md bg-red-100 px-3 py-2 text-red-900 text-sm dark:bg-red-900 dark:text-red-100"
-          role="alert"
-        >
+        <p className={errorNoticeClass} role="alert">
           {apiError.body.issues.map((i) => i.message).join(" ")}
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 pt-2">
+      <div className={`flex flex-wrap items-center gap-2 pt-2 ${sheet ? "mt-auto" : ""}`}>
         {!readOnly ? (
           <button
             type="submit"
@@ -320,33 +348,33 @@ function EditorForm() {
             {editing ? "Save" : "Create slot"}
           </button>
         ) : null}
-        <button
-          type="button"
-          className="rounded-md border border-neutral-300 px-4 py-2 dark:border-neutral-700"
-          onClick={editor.close}
-        >
+        <button type="button" className={secondaryButtonClass} onClick={editor.close}>
           {readOnly ? "Close" : "Cancel"}
         </button>
         {editing && !readOnly ? (
           confirmDelete ? (
-            <span className="ml-auto flex items-center gap-2 text-sm">
+            <span className="ml-auto flex flex-wrap items-center gap-2 text-sm">
               Delete this slot?
               <button
                 type="button"
-                className="rounded-md bg-red-700 px-3 py-1.5 text-white"
+                className={dangerButtonClass}
                 onClick={() => remove.mutate(editing.id, { onSuccess: editor.close })}
                 disabled={pending}
               >
                 Yes, delete
               </button>
-              <button type="button" className="underline" onClick={() => setConfirmDelete(false)}>
+              <button
+                type="button"
+                className={linkButtonClass}
+                onClick={() => setConfirmDelete(false)}
+              >
                 No
               </button>
             </span>
           ) : (
             <button
               type="button"
-              className="ml-auto text-red-700 text-sm underline dark:text-red-400"
+              className={`${linkButtonClass} ml-auto text-danger hover:text-danger`}
               onClick={() => setConfirmDelete(true)}
             >
               Delete

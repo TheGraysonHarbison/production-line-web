@@ -1,5 +1,10 @@
 import { ApiError } from "../lib/api.ts";
 
+export const errorNoticeClass =
+  "rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-ink text-sm";
+export const successNoticeClass =
+  "rounded-lg border border-ok/30 bg-ok-soft px-3 py-2 text-ink text-sm";
+
 export function ErrorNotice({ error, map = {} }: { error: unknown; map?: Record<string, string> }) {
   if (!error) return null;
   const message =
@@ -9,10 +14,7 @@ export function ErrorNotice({ error, map = {} }: { error: unknown; map?: Record<
         ? error.message
         : "Something went wrong";
   return (
-    <p
-      className="rounded-md bg-red-100 px-3 py-2 text-red-900 text-sm dark:bg-red-900 dark:text-red-100"
-      role="alert"
-    >
+    <p className={errorNoticeClass} role="alert">
       {message}
     </p>
   );
@@ -21,10 +23,7 @@ export function ErrorNotice({ error, map = {} }: { error: unknown; map?: Record<
 export function SuccessNotice({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p
-      className="rounded-md bg-green-100 px-3 py-2 text-green-900 text-sm dark:bg-green-900 dark:text-green-100"
-      role="status"
-    >
+    <p className={successNoticeClass} role="status">
       {message}
     </p>
   );

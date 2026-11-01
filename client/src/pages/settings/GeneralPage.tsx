@@ -35,22 +35,23 @@ export function GeneralPage() {
     );
   };
 
-  if (!settings.data) return <p className="text-sm opacity-70">Loading…</p>;
+  if (!settings.data) return <p className="text-ink-muted text-sm">Loading…</p>;
 
   return (
     <form onSubmit={save} className="flex flex-col gap-6">
       <h2 className="font-semibold text-2xl">General</h2>
       <SuccessNotice message={saved} />
       <ErrorNotice error={update.error} />
-      <label className="flex items-center gap-3">
+      <label className="flex min-h-11 items-center gap-3">
         <input
           type="checkbox"
+          className="accent-accent"
           checked={imagesEnabled}
           onChange={(e) => setImagesEnabled(e.target.checked)}
         />
         <span>
           <span className="font-medium">Allow images</span>
-          <span className="block text-sm opacity-70">
+          <span className="block text-ink-muted text-sm">
             Slot and profile images. Turning this off keeps existing images but blocks new uploads.
           </span>
         </span>

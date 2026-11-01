@@ -1,13 +1,17 @@
 import type { Me, TimeFormat } from "@production-line/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
+import { Avatar } from "../components/Avatar.tsx";
 import { buttonClass, Field, inputClass } from "../components/Field.tsx";
+import { ErrorNotice, SuccessNotice } from "../components/Notice.tsx";
 import { ApiError, api } from "../lib/api.ts";
 import { meQueryKey, useMe } from "../lib/auth.tsx";
+import { useTheme } from "../theme/theme.tsx";
 
 export function ProfilePage() {
   const me = useMe();
   const qc = useQueryClient();
+  const theme = useTheme();
   const [color, setColor] = useState("#4f9cff");
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("12h");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -20,6 +24,14 @@ export function ProfilePage() {
       setTimeFormat(me.data.time_format);
     }
   }, [me.data]);
+
+  // Live preview (dev doc §11): the chrome follows the picker; leaving the page reverts it.
+  const previewColor = me.data && color !== me.data.color ? color : null;
+  const { setPreview } = theme;
+  useEffect(() => {
+    setPreview(previewColor);
+    return () => setPreview(null);
+  }, [previewColor, setPreview]);
 
   const prefs = useMutation({
     mutationFn: () =>
@@ -50,18 +62,13 @@ export function ProfilePage() {
       : (pwErr?.fieldMessage("password") ?? pwErr?.message);
 
   if (!me.data) return null;
+  const p = theme.palette;
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-8">
+    <main className="flex flex-col gap-8">
       <h2 className="font-semibold text-2xl">Profile</h2>
-      {saved ? (
-        <p
-          className="rounded-md bg-green-100 px-3 py-2 text-green-900 text-sm dark:bg-green-900 dark:text-green-100"
-          role="status"
-        >
-          {saved}
-        </p>
-      ) : null}
+      <SuccessNotice message={saved} />
+      <ErrorNotice error={prefs.error} />
 
       <form
         className="flex flex-col gap-4"
@@ -72,14 +79,42 @@ export function ProfilePage() {
         }}
       >
         <h3 className="font-medium text-lg">Preferences</h3>
-        <Field label="Your color" htmlFor="color">
-          <input
-            id="color"
-            type="color"
-            className="h-10 w-20 cursor-pointer rounded-md"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-          />
+        <Field
+          label="Your color"
+          htmlFor="color"
+          hint="Tints your slots everywhere and the app's chrome for you. The preview updates as you pick."
+        >
+          <div className="flex flex-wrap items-center gap-4">
+            <input
+              id="color"
+              type="color"
+              className="h-11 w-20 cursor-pointer rounded-lg border border-line-strong bg-transparent p-1"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+            />
+            <div className="flex items-center gap-3" data-testid="color-preview">
+              <Avatar user={{ username: me.data.username, color, avatar_url: null }} size={40} />
+              <span
+                className="inline-flex min-h-11 items-center rounded-lg px-3 font-medium text-sm"
+                style={{ background: "var(--accent)", color: "var(--on-accent)" }}
+              >
+                Accent
+              </span>
+              <span
+                className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm"
+                style={{
+                  background: "var(--accent-soft)",
+                  borderColor: "var(--accent)",
+                  color: "var(--ink)",
+                }}
+              >
+                Soft
+              </span>
+              <span className="text-ink-muted text-xs">
+                light {p.light.accent} · dark {p.dark.accent}
+              </span>
+            </div>
+          </div>
         </Field>
         <Field label="Time format" htmlFor="time_format">
           <select
@@ -92,9 +127,11 @@ export function ProfilePage() {
             <option value="24h">24-hour (13:30)</option>
           </select>
         </Field>
-        <button type="submit" className={buttonClass} disabled={prefs.isPending}>
-          Save preferences
-        </button>
+        <div>
+          <button type="submit" className={buttonClass} disabled={prefs.isPending}>
+            Save preferences
+          </button>
+        </div>
       </form>
 
       <form
@@ -134,13 +171,15 @@ export function ProfilePage() {
             required
           />
         </Field>
-        <button
-          type="submit"
-          className={buttonClass}
-          disabled={password.isPending || !currentPassword || !newPassword}
-        >
-          Change password
-        </button>
+        <div>
+          <button
+            type="submit"
+            className={buttonClass}
+            disabled={password.isPending || !currentPassword || !newPassword}
+          >
+            Change password
+          </button>
+        </div>
       </form>
     </main>
   );

@@ -50,7 +50,7 @@ async function xFor(page: Page, trackBox: { x: number }, label: string, plusMinu
 test.describe("desktop scheduling", () => {
   test.skip(
     ({ isMobile, viewport }) => isMobile || (viewport?.width ?? 0) < 1024,
-    "desktop only until Phase 7",
+    "desktop pointer interactions; touch layouts are covered in responsive.spec.ts",
   );
 
   test("create by drag, edit, see a 409 surfaced, resize by drag, and delete", async ({

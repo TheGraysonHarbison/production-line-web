@@ -1,11 +1,220 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light dark;
+/*
+ * Theme tokens (dev doc §11.3). The palette JS writes the per-scheme accent variables
+ * (--accent-l / --accent-d, …) onto :root; everything below picks the right one for
+ * prefers-color-scheme and exposes the result to Tailwind as color utilities.
+ */
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-strong: var(--accent-strong);
+  --color-on-accent: var(--on-accent);
+  --color-accent-raw: var(--accent-raw);
+  --color-on-accent-raw: var(--on-accent-raw);
+  --color-canvas: var(--canvas);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --breakpoint-tablet: 48rem;
+  --breakpoint-desktop: 64rem;
 }
 
-body {
-  margin: 0;
-  min-height: 100dvh;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+:root {
+  color-scheme: light dark;
+
+  /* Defaults before the palette runs (the setup/login pages, or a failed /api/me). */
+  --accent-raw: #4f9cff;
+  --on-accent-raw: #000000;
+  --accent-l: #3b82e0;
+  --accent-soft-l: #eaf2fd;
+  --accent-strong-l: #2a69c2;
+  --on-accent-l: #fafcff;
+  --accent-d: #6fb0ff;
+  --accent-soft-d: #1d2a3d;
+  --accent-strong-d: #8cc1ff;
+  --on-accent-d: #0b1220;
+
+  --accent: var(--accent-l);
+  --accent-soft: var(--accent-soft-l);
+  --accent-strong: var(--accent-strong-l);
+  --on-accent: var(--on-accent-l);
+
+  --canvas: oklch(0.975 0.006 250);
+  --ink: oklch(0.22 0.02 250);
+  --ink-muted: color-mix(in oklab, var(--ink) 62%, transparent);
+  --line: color-mix(in oklab, var(--ink) 11%, transparent);
+  --line-strong: color-mix(in oklab, var(--ink) 22%, transparent);
+  --danger: oklch(0.5 0.19 25);
+  --danger-soft: oklch(0.95 0.03 25);
+  --ok: oklch(0.5 0.15 150);
+  --ok-soft: oklch(0.95 0.04 150);
+  --warn: oklch(0.72 0.17 70);
+
+  /* Frosted glass */
+  --glass: color-mix(in oklab, white 58%, transparent);
+  --glass-strong: color-mix(in oklab, white 78%, transparent);
+  --glass-solid: color-mix(in oklab, white 94%, var(--canvas));
+  --glass-border: color-mix(in oklab, white 72%, transparent);
+  --glass-shadow:
+    0 10px 30px -14px oklch(0.2 0.03 250 / 0.35), 0 1px 2px oklch(0.2 0.03 250 / 0.08);
+  --hatch: color-mix(in oklab, var(--ink) 14%, transparent);
+
+  --tabbar-height: 64px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: var(--accent-d);
+    --accent-soft: var(--accent-soft-d);
+    --accent-strong: var(--accent-strong-d);
+    --on-accent: var(--on-accent-d);
+
+    --canvas: oklch(0.17 0.015 250);
+    --ink: oklch(0.95 0.01 250);
+    --ink-muted: color-mix(in oklab, var(--ink) 64%, transparent);
+    --line: color-mix(in oklab, var(--ink) 12%, transparent);
+    --line-strong: color-mix(in oklab, var(--ink) 24%, transparent);
+    --danger: oklch(0.75 0.16 25);
+    --danger-soft: oklch(0.3 0.08 25);
+    --ok: oklch(0.78 0.14 150);
+    --ok-soft: oklch(0.3 0.06 150);
+    --warn: oklch(0.8 0.15 70);
+
+    --glass: color-mix(in oklab, oklch(0.28 0.02 250) 55%, transparent);
+    --glass-strong: color-mix(in oklab, oklch(0.26 0.02 250) 80%, transparent);
+    --glass-solid: color-mix(in oklab, oklch(0.25 0.02 250) 96%, var(--canvas));
+    --glass-border: color-mix(in oklab, white 12%, transparent);
+    --glass-shadow: 0 12px 34px -14px oklch(0 0 0 / 0.7), 0 1px 2px oklch(0 0 0 / 0.3);
+    --hatch: color-mix(in oklab, var(--ink) 16%, transparent);
+  }
+}
+
+@layer base {
+  html {
+    background: var(--canvas);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background-color: var(--canvas);
+    /* The accent-tinted wash gives the glass something to blur. */
+    background-image:
+      radial-gradient(60rem 36rem at 8% -10%, var(--accent-soft), transparent 70%),
+      radial-gradient(
+        50rem 30rem at 110% 10%,
+        color-mix(in oklab, var(--accent) 22%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        40rem 30rem at 50% 120%,
+        color-mix(in oklab, var(--accent-soft) 70%, transparent),
+        transparent 70%
+      );
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  dialog::backdrop {
+    background: color-mix(in oklab, var(--canvas) 50%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  /*
+   * Touch targets (dev doc §11.1): 44px minimum below the desktop breakpoint. Controls that encode
+   * time (timeline cards, resize handles) opt out with `data-geometry`.
+   */
+  @media (max-width: 63.98rem) {
+    button:not([data-geometry]),
+    [role="button"]:not([data-geometry]),
+    a[href],
+    select,
+    textarea,
+    input:not([type="checkbox"]):not([type="radio"]) {
+      min-height: 44px;
+    }
+    button:not([data-geometry]),
+    a[href] {
+      min-width: 44px;
+    }
+    a[href] {
+      display: inline-flex;
+      align-items: center;
+    }
+    input[type="checkbox"],
+    input[type="radio"] {
+      width: 24px;
+      height: 24px;
+    }
+  }
+}
+
+@layer components {
+  .glass,
+  .glass-strong {
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+  }
+  .glass {
+    background: var(--glass);
+  }
+  .glass-strong {
+    background: var(--glass-strong);
+  }
+
+  /* Browsers without backdrop-filter get a solid, slightly translucent surface instead. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass,
+    .glass-strong {
+      background: var(--glass-solid);
+    }
+  }
+
+  .glass-in {
+    animation: glass-in 180ms ease-out both;
+  }
+  @keyframes glass-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+      -webkit-backdrop-filter: blur(0) saturate(100%);
+      backdrop-filter: blur(0) saturate(100%);
+    }
+  }
+
+  .hatched {
+    background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--hatch) 6px 8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-in {
+    animation: none;
+  }
+  *,
+  ::before,
+  ::after {
+    /* biome-ignore lint/complexity/noImportantStyles: must beat utility transitions */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must beat utility animations */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must beat utility scroll behavior */
+    scroll-behavior: auto !important;
+  }
 }

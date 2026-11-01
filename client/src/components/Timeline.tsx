@@ -17,6 +17,12 @@ import { SlotCard } from "./SlotCard.tsx";
 export const PX_PER_MINUTE = 1.25;
 const LANE_HEIGHT = 56;
 const LABEL_WIDTH = 160;
+const GUTTER_WIDTH = 56;
+const COLUMN_HEADER = 48;
+/** Narrowest a vertical column may get before the timeline scrolls sideways (≥ 44px targets). */
+const MIN_COLUMN = 120;
+
+export type Orientation = "horizontal" | "vertical";
 
 export interface DragRange {
   printer: Printer;
@@ -30,6 +36,8 @@ interface TimelineProps {
   printers: Printer[];
   slots: Slot[];
   now: number;
+  /** Horizontal lanes on desktop/tablet; vertical, scrolling columns on phones (dev doc §11.2). */
+  orientation?: Orientation;
   onCreate: (range: DragRange) => void;
   onOpen: (slot: Slot) => void;
   onResize: (slot: Slot, end_at: string) => void;
@@ -52,9 +60,10 @@ interface DragState {
 }
 
 /**
- * Horizontal day timeline (dev doc §11.2): one lane per printer, hour ticks, hatched past,
- * current-time line, drag-to-create on empty lane space, drag-to-resize on your own cards.
- * Keyboard users create via the per-lane "Book" button and resize through the editor.
+ * Day timeline (dev doc §11.2): one lane per printer, hour ticks, hatched past, current-time line,
+ * drag-to-create on empty lane space, drag-to-resize on your own cards. A tap without movement
+ * books an hour at that time (the touch equivalent of dragging); keyboard users create via the
+ * per-lane "Book" button and resize through the editor.
  */
 export function Timeline({
   date,
@@ -62,15 +71,17 @@ export function Timeline({
   printers,
   slots,
   now,
+  orientation = "horizontal",
   onCreate,
   onOpen,
   onResize,
 }: TimelineProps) {
+  const vertical = orientation === "vertical";
   const tz = useTimeZone();
   const fmt = useTimeFormat();
   const me = useMe();
   const ticks: Tick[] = dayTicks(date, tz, fmt);
-  const width = minuteToX(bounds.minutes);
+  const length = minuteToX(bounds.minutes);
   const nowMinute = minutesInto(isoFromMs(now), bounds.from);
   const nowInDay = nowMinute >= 0 && nowMinute <= bounds.minutes;
   const pastMinutes = Math.min(Math.max(nowMinute, 0), bounds.minutes);
@@ -78,18 +89,19 @@ export function Timeline({
   const laneRefs = useRef(new Map<number, HTMLDivElement>());
 
   const minuteAt = useCallback(
-    (printerId: number, clientX: number) => {
+    (printerId: number, clientX: number, clientY: number) => {
       const el = laneRefs.current.get(printerId);
       if (!el) return 0;
-      const x = clientX - el.getBoundingClientRect().left;
-      return Math.min(Math.max(xToMinute(x), 0), bounds.minutes);
+      const rect = el.getBoundingClientRect();
+      const px = vertical ? clientY - rect.top : clientX - rect.left;
+      return Math.min(Math.max(xToMinute(px), 0), bounds.minutes);
     },
-    [bounds.minutes],
+    [bounds.minutes, vertical],
   );
 
   const onLanePointerDown = (printer: Printer) => (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || printer.invisible || e.target !== e.currentTarget) return;
-    const m = snapMinutes(minuteAt(printer.id, e.clientX), "floor");
+    const m = snapMinutes(minuteAt(printer.id, e.clientX, e.clientY), "floor");
     e.currentTarget.setPointerCapture(e.pointerId);
     setDrag({ kind: "create", printer, anchor: m, current: m, moved: false });
   };
@@ -105,7 +117,7 @@ export function Timeline({
 
   const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
     if (!drag) return;
-    const m = snapMinutes(minuteAt(drag.printer.id, e.clientX));
+    const m = snapMinutes(minuteAt(drag.printer.id, e.clientX, e.clientY));
     if (m !== drag.current) setDrag({ ...drag, current: m, moved: true });
   };
 
@@ -131,29 +143,216 @@ export function Timeline({
     }
   };
 
-  const hatch =
-    "repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, currentColor 12%, transparent) 6px 8px)";
+  const book = (printer: Printer) => {
+    const start = snapMinutes(Math.max(nowInDay ? nowMinute : 0, 0), "ceil");
+    onCreate({
+      printer,
+      start_at: isoFromMs(Date.parse(bounds.from) + start * 60_000),
+      end_at: isoFromMs(Date.parse(bounds.from) + Math.min(start + 60, bounds.minutes) * 60_000),
+    });
+  };
 
-  return (
-    <div
-      className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800"
-      data-testid="timeline"
-    >
-      <div style={{ width: width + LABEL_WIDTH }}>
-        {/* ticks */}
+  // Geometry helpers: `along` is the time axis, `across` the other one.
+  const along = (px: number) => (vertical ? { top: px } : { left: px });
+  const span = (from: number, to: number) =>
+    vertical ? { top: from, height: to - from } : { left: from, width: to - from };
+
+  const renderLaneBody = (printer: Printer) => {
+    const laneSlots = slots.filter((s) => s.printers.some((p) => p.id === printer.id));
+    const preview =
+      drag && drag.printer.id === printer.id && drag.kind === "create"
+        ? { start: Math.min(drag.anchor, drag.current), end: Math.max(drag.anchor, drag.current) }
+        : null;
+    return (
+      <div
+        ref={(el) => {
+          if (el) laneRefs.current.set(printer.id, el);
+          else laneRefs.current.delete(printer.id);
+        }}
+        className={`relative ${printer.invisible ? "" : "cursor-crosshair"}`}
+        style={{
+          ...(vertical ? { height: length } : { width: length }),
+          // Phones scroll the vertical timeline by touch; a plain tap still books. Mouse drags
+          // work in both orientations.
+          touchAction: vertical ? "pan-y" : "none",
+        }}
+        onPointerDown={onLanePointerDown(printer)}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => setDrag(null)}
+        data-testid="lane-track"
+      >
+        {/* hatched: the past, or the whole lane for invisible printers */}
         <div
-          className="flex border-neutral-200 border-b text-xs dark:border-neutral-800"
-          style={{ height: 28 }}
-        >
+          className="hatched pointer-events-none absolute opacity-70"
+          style={{
+            ...(vertical ? { insetInline: 0 } : { insetBlock: 0 }),
+            ...span(0, printer.invisible ? length : minuteToX(pastMinutes)),
+          }}
+          aria-hidden="true"
+        />
+        {ticks.map((t) => (
           <div
-            className="shrink-0 border-neutral-200 border-r dark:border-neutral-800"
-            style={{ width: LABEL_WIDTH }}
+            key={t.iso}
+            className={`pointer-events-none absolute border-line ${
+              vertical ? "inset-x-0 border-t" : "inset-y-0 border-l"
+            }`}
+            style={along(minuteToX(t.minute))}
+            aria-hidden="true"
           />
-          <div className="relative" style={{ width }}>
+        ))}
+        {laneSlots.map((slot) => {
+          const start = Math.max(minutesInto(slot.start_at, bounds.from), 0);
+          const end = Math.min(minutesInto(slot.end_at, bounds.from), bounds.minutes);
+          const editable = canEditSlot(me.data, slot);
+          const running = slotIsRunning(slot, now);
+          const resizing =
+            drag?.kind === "resize" && drag.slot?.id === slot.id ? drag.current : null;
+          const endPx = minuteToX(resizing ?? end);
+          return (
+            <div key={slot.id} className="contents">
+              <SlotCard
+                slot={slot}
+                editable={editable}
+                running={running}
+                onOpen={onOpen}
+                offset={minuteToX(start)}
+                length={endPx - minuteToX(start)}
+                vertical={vertical}
+              />
+              {editable ? (
+                <button
+                  type="button"
+                  className={`absolute opacity-0 hover:opacity-100 focus:opacity-100 ${
+                    vertical
+                      ? "inset-x-1 h-2 cursor-ns-resize rounded-b-md"
+                      : "inset-y-1 w-2 cursor-ew-resize rounded-r-md"
+                  }`}
+                  style={{
+                    ...along(endPx - 8),
+                    backgroundColor: slot.user.color,
+                    touchAction: "none",
+                  }}
+                  onPointerDown={onHandlePointerDown(printer, slot)}
+                  onPointerMove={(e) => {
+                    e.stopPropagation();
+                    onPointerMove(e);
+                  }}
+                  onPointerUp={(e) => {
+                    e.stopPropagation();
+                    onPointerUp();
+                  }}
+                  aria-label={`Drag to change the end of ${slot.name}`}
+                  title="Drag to change the end time"
+                  data-testid="resize-handle"
+                  data-geometry="time"
+                />
+              ) : null}
+            </div>
+          );
+        })}
+        {preview ? (
+          <div
+            className={`pointer-events-none absolute rounded-lg border-2 border-accent border-dashed bg-accent-soft/60 ${
+              vertical ? "inset-x-1" : "inset-y-1"
+            }`}
+            style={{
+              ...span(minuteToX(preview.start), minuteToX(preview.end)),
+              ...(vertical
+                ? { height: Math.max(minuteToX(preview.end - preview.start), 2) }
+                : { width: Math.max(minuteToX(preview.end - preview.start), 2) }),
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+        {nowInDay ? (
+          <div
+            className={`pointer-events-none absolute bg-danger ${
+              vertical ? "inset-x-0 h-0.5" : "inset-y-0 w-0.5"
+            }`}
+            style={along(minuteToX(nowMinute))}
+            aria-hidden="true"
+            data-testid="now-line"
+            title={formatTime(isoFromMs(now), tz, fmt)}
+          />
+        ) : null}
+      </div>
+    );
+  };
+
+  if (vertical) {
+    return (
+      <div
+        className="glass overflow-x-auto rounded-2xl"
+        data-testid="timeline"
+        data-orientation="vertical"
+      >
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: `${GUTTER_WIDTH}px repeat(${printers.length}, minmax(${MIN_COLUMN}px, 1fr))`,
+            minWidth: GUTTER_WIDTH + printers.length * MIN_COLUMN,
+          }}
+        >
+          {/* header row: corner + one column per printer */}
+          <div
+            className="sticky top-0 z-[1] border-line border-b"
+            style={{ height: COLUMN_HEADER }}
+          />
+          {printers.map((printer) => (
+            <div
+              key={printer.id}
+              className="glass-strong sticky top-0 z-[1] flex flex-col justify-center border-line border-x-0 border-t-0 border-b text-center shadow-none"
+              style={{ height: COLUMN_HEADER }}
+              data-testid="lane"
+              data-printer-id={printer.id}
+            >
+              <LaneLabel printer={printer} onBook={book} />
+            </div>
+          ))}
+          {/* body row: tick gutter + one lane per printer */}
+          <div className="relative border-line border-r" style={{ height: length }}>
             {ticks.map((t) => (
               <span
                 key={t.iso}
-                className="absolute top-1 -translate-x-1/2 opacity-70"
+                className="-translate-y-1/2 absolute right-1.5 text-ink-muted text-xs"
+                style={{ top: minuteToX(t.minute) }}
+                data-testid="tick"
+              >
+                {t.label}
+              </span>
+            ))}
+          </div>
+          {printers.map((printer) => (
+            <div
+              key={printer.id}
+              className="border-line border-r last:border-r-0"
+              data-testid="lane-body"
+              data-printer-id={printer.id}
+            >
+              {renderLaneBody(printer)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="glass overflow-x-auto rounded-2xl"
+      data-testid="timeline"
+      data-orientation="horizontal"
+    >
+      <div style={{ width: length + LABEL_WIDTH }}>
+        {/* ticks */}
+        <div className="flex border-line border-b text-xs" style={{ height: 28 }}>
+          <div className="shrink-0 border-line border-r" style={{ width: LABEL_WIDTH }} />
+          <div className="relative" style={{ width: length }}>
+            {ticks.map((t) => (
+              <span
+                key={t.iso}
+                className="-translate-x-1/2 absolute top-1 text-ink-muted"
                 style={{ left: minuteToX(t.minute) }}
                 data-testid="tick"
               >
@@ -163,152 +362,51 @@ export function Timeline({
           </div>
         </div>
 
-        {printers.map((printer) => {
-          const laneSlots = slots.filter((s) => s.printers.some((p) => p.id === printer.id));
-          const preview =
-            drag && drag.printer.id === printer.id
-              ? drag.kind === "create"
-                ? {
-                    start: Math.min(drag.anchor, drag.current),
-                    end: Math.max(drag.anchor, drag.current),
-                  }
-                : null
-              : null;
-          return (
+        {printers.map((printer) => (
+          <div
+            key={printer.id}
+            className="flex border-line border-b last:border-b-0"
+            style={{ height: LANE_HEIGHT }}
+            data-testid="lane"
+            data-printer-id={printer.id}
+          >
             <div
-              key={printer.id}
-              className="flex border-neutral-200 border-b last:border-b-0 dark:border-neutral-800"
-              style={{ height: LANE_HEIGHT }}
-              data-testid="lane"
-              data-printer-id={printer.id}
+              className="flex shrink-0 flex-col justify-center border-line border-r"
+              style={{ width: LABEL_WIDTH }}
             >
-              <div
-                className="flex shrink-0 flex-col justify-center gap-1 border-neutral-200 border-r px-3 dark:border-neutral-800"
-                style={{ width: LABEL_WIDTH }}
-              >
-                <span
-                  className={`truncate font-medium text-sm ${printer.invisible ? "opacity-60" : ""}`}
-                >
-                  {printer.name}
-                </span>
-                {printer.invisible ? (
-                  <span className="text-xs opacity-60">not bookable</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="w-fit text-xs underline"
-                    onClick={() => {
-                      const start = snapMinutes(Math.max(nowInDay ? nowMinute : 0, 0), "ceil");
-                      onCreate({
-                        printer,
-                        start_at: isoFromMs(Date.parse(bounds.from) + start * 60_000),
-                        end_at: isoFromMs(
-                          Date.parse(bounds.from) + Math.min(start + 60, bounds.minutes) * 60_000,
-                        ),
-                      });
-                    }}
-                    aria-label={`Book ${printer.name}`}
-                  >
-                    + Book
-                  </button>
-                )}
-              </div>
-              <div
-                ref={(el) => {
-                  if (el) laneRefs.current.set(printer.id, el);
-                  else laneRefs.current.delete(printer.id);
-                }}
-                className={`relative ${printer.invisible ? "" : "cursor-crosshair"}`}
-                style={{ width, touchAction: "none" }}
-                onPointerDown={onLanePointerDown(printer)}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onPointerCancel={() => setDrag(null)}
-                data-testid="lane-track"
-              >
-                {/* hatched: the past, or the whole lane for invisible printers */}
-                <div
-                  className="pointer-events-none absolute inset-y-0 left-0 opacity-60"
-                  style={{
-                    width: printer.invisible ? width : minuteToX(pastMinutes),
-                    backgroundImage: hatch,
-                  }}
-                  aria-hidden="true"
-                />
-                {ticks.map((t) => (
-                  <div
-                    key={t.iso}
-                    className="pointer-events-none absolute inset-y-0 border-neutral-200 border-l dark:border-neutral-800"
-                    style={{ left: minuteToX(t.minute) }}
-                    aria-hidden="true"
-                  />
-                ))}
-                {laneSlots.map((slot) => {
-                  const start = Math.max(minutesInto(slot.start_at, bounds.from), 0);
-                  const end = Math.min(minutesInto(slot.end_at, bounds.from), bounds.minutes);
-                  const editable = canEditSlot(me.data, slot);
-                  const running = slotIsRunning(slot, now);
-                  const resizing =
-                    drag?.kind === "resize" && drag.slot?.id === slot.id ? drag.current : null;
-                  return (
-                    <div key={slot.id} className="contents">
-                      <SlotCard
-                        slot={slot}
-                        editable={editable}
-                        running={running}
-                        onOpen={onOpen}
-                        left={minuteToX(start)}
-                        width={minuteToX((resizing ?? end) - start)}
-                      />
-                      {editable ? (
-                        <button
-                          type="button"
-                          className="absolute top-1 bottom-1 w-2 cursor-ew-resize rounded-r-md opacity-0 hover:opacity-100 focus:opacity-100"
-                          style={{
-                            left: minuteToX(resizing ?? end) - 8,
-                            backgroundColor: slot.user.color,
-                          }}
-                          onPointerDown={onHandlePointerDown(printer, slot)}
-                          onPointerMove={(e) => {
-                            e.stopPropagation();
-                            onPointerMove(e);
-                          }}
-                          onPointerUp={(e) => {
-                            e.stopPropagation();
-                            onPointerUp();
-                          }}
-                          aria-label={`Drag to change the end of ${slot.name}`}
-                          title="Drag to change the end time"
-                          data-testid="resize-handle"
-                        />
-                      ) : null}
-                    </div>
-                  );
-                })}
-                {preview ? (
-                  <div
-                    className="pointer-events-none absolute top-1 bottom-1 rounded-md border-2 border-dashed border-neutral-500"
-                    style={{
-                      left: minuteToX(preview.start),
-                      width: Math.max(minuteToX(preview.end - preview.start), 2),
-                    }}
-                    aria-hidden="true"
-                  />
-                ) : null}
-                {nowInDay ? (
-                  <div
-                    className="pointer-events-none absolute inset-y-0 w-0.5 bg-red-500"
-                    style={{ left: minuteToX(nowMinute) }}
-                    aria-hidden="true"
-                    data-testid="now-line"
-                    title={formatTime(isoFromMs(now), tz, fmt)}
-                  />
-                ) : null}
-              </div>
+              <LaneLabel printer={printer} onBook={book} />
             </div>
-          );
-        })}
+            {renderLaneBody(printer)}
+          </div>
+        ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * The printer name cell. For bookable printers the whole cell is the keyboard/touch "Book" control
+ * (it fills the lane, so it clears the 44px target on every layout).
+ */
+function LaneLabel({ printer, onBook }: { printer: Printer; onBook: (p: Printer) => void }) {
+  if (printer.invisible) {
+    return (
+      <div className="flex h-full flex-col justify-center px-3 opacity-60">
+        <span className="truncate font-medium text-sm">{printer.name}</span>
+        <span className="text-ink-muted text-xs">not bookable</span>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="flex h-full w-full min-w-0 flex-col justify-center rounded-none px-3 text-left hover:bg-accent-soft"
+      onClick={() => onBook(printer)}
+      aria-label={`Book ${printer.name}`}
+      title={`Book ${printer.name}`}
+    >
+      <span className="w-full truncate font-medium text-sm">{printer.name}</span>
+      <span className="text-accent text-xs">+ Book</span>
+    </button>
   );
 }

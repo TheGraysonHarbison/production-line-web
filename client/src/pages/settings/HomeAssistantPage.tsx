@@ -1,5 +1,11 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { buttonClass, Field, inputClass } from "../../components/Field.tsx";
+import {
+  buttonClass,
+  Field,
+  inputClass,
+  linkButtonClass,
+  secondaryButtonClass,
+} from "../../components/Field.tsx";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice.tsx";
 import { useSettings, useUpdateSettings } from "../../lib/data.ts";
 
@@ -36,21 +42,26 @@ export function HomeAssistantPage() {
     );
   };
 
-  if (!settings.data) return <p className="text-sm opacity-70">Loading…</p>;
+  if (!settings.data) return <p className="text-ink-muted text-sm">Loading…</p>;
   const tokenSet = settings.data.ha_token.set;
 
   return (
     <form onSubmit={save} className="flex flex-col gap-6">
       <h2 className="font-semibold text-2xl">Home Assistant</h2>
-      <p className="text-sm opacity-80">
+      <p className="text-ink-muted text-sm">
         When a slot expires, its details are sent to Home Assistant as a{" "}
-        <code>production_line_slot_expired</code> event. Create a long-lived access token in HA
-        (Profile → Security) and paste it below.
+        <code className="rounded bg-accent-soft px-1 text-ink">production_line_slot_expired</code>{" "}
+        event. Create a long-lived access token in HA (Profile → Security) and paste it below.
       </p>
       <SuccessNotice message={saved} />
       <ErrorNotice error={update.error} />
-      <label className="flex items-center gap-3">
-        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+      <label className="flex min-h-11 items-center gap-3">
+        <input
+          type="checkbox"
+          className="accent-accent"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
         <span className="font-medium">Send events to Home Assistant</span>
       </label>
       <Field label="Base URL" htmlFor="ha-url" hint="e.g. http://homeassistant.local:8123">
@@ -71,7 +82,7 @@ export function HomeAssistantPage() {
         <div className="flex flex-wrap items-center gap-2">
           <input
             id="ha-token"
-            className={inputClass}
+            className={`${inputClass} min-w-0 flex-1`}
             type="password"
             autoComplete="off"
             value={token}
@@ -84,7 +95,7 @@ export function HomeAssistantPage() {
           {tokenSet ? (
             <button
               type="button"
-              className="text-sm underline"
+              className={linkButtonClass}
               onClick={() =>
                 update.mutate({ ha_token: null }, { onSuccess: () => setSaved("Token cleared.") })
               }
@@ -94,19 +105,19 @@ export function HomeAssistantPage() {
           ) : null}
         </div>
       </Field>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className={buttonClass} disabled={update.isPending}>
           Save
         </button>
         <button
           type="button"
-          className="rounded-md border border-neutral-300 px-4 py-2 dark:border-neutral-700"
+          className={secondaryButtonClass}
           disabled
           title="Available in a later version"
         >
           Test
         </button>
-        <span className="self-center text-sm opacity-70">
+        <span className="text-ink-muted text-sm">
           Test delivery is available in a later version.
         </span>
       </div>

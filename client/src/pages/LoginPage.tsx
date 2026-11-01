@@ -2,7 +2,7 @@ import type { Me } from "@production-line/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { buttonClass, Field, inputClass } from "../components/Field.tsx";
+import { buttonClass, Field, inputClass, linkButtonClass } from "../components/Field.tsx";
 import { ApiError, api } from "../lib/api.ts";
 import { meQueryKey, useMeta } from "../lib/auth.tsx";
 import { AuthLayout } from "./AuthLayout.tsx";
@@ -62,7 +62,7 @@ export function LoginPage() {
           />
         </Field>
         {message ? (
-          <p className="text-red-600 text-sm dark:text-red-400" role="alert">
+          <p className="text-danger text-sm" role="alert">
             {message}
           </p>
         ) : null}
@@ -73,7 +73,7 @@ export function LoginPage() {
       {meta.data?.registration_enabled ? (
         <p className="text-sm">
           New here?{" "}
-          <Link to="/register" className="underline">
+          <Link to="/register" className={linkButtonClass}>
             Create an account
           </Link>
         </p>

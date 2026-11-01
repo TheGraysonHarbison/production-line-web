@@ -1,7 +1,7 @@
 import type { PublicUser } from "@production-line/shared";
 import { type FormEvent, useEffect, useState } from "react";
 import { Avatar } from "../../components/Avatar.tsx";
-import { buttonClass, inputClass } from "../../components/Field.tsx";
+import { buttonClass, inputClass, linkButtonClass } from "../../components/Field.tsx";
 import { ErrorNotice, SuccessNotice } from "../../components/Notice.tsx";
 import { useMe } from "../../lib/auth.tsx";
 import { useSettings, useUpdateSettings, useUserMutations, useUsers } from "../../lib/data.ts";
@@ -26,24 +26,24 @@ function UserRow({ user, isSelf }: { user: PublicUser; isSelf: boolean }) {
 
   return (
     <li
-      className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800"
+      className="flex flex-col gap-2 rounded-xl border border-line bg-canvas/40 p-3"
       data-testid="user-row"
     >
       <div className="flex flex-wrap items-center gap-3">
         <Avatar user={user} size={28} />
         <span className="font-medium">{user.username}</span>
         <span
-          className="rounded bg-neutral-200 px-2 py-0.5 text-xs dark:bg-neutral-800"
+          className="rounded-full bg-accent-soft px-2 py-0.5 text-xs"
           data-testid={`role-${user.username}`}
         >
           {user.role}
         </span>
-        {isSelf ? <span className="text-xs opacity-70">(you)</span> : null}
+        {isSelf ? <span className="text-ink-muted text-xs">(you)</span> : null}
         {user.role !== "owner" ? (
-          <div className="ml-auto flex flex-wrap gap-2 text-sm">
+          <div className="ml-auto flex flex-wrap gap-1 text-sm">
             <button
               type="button"
-              className="underline"
+              className={linkButtonClass}
               onClick={() =>
                 setRole.mutate({ id: user.id, role: user.role === "admin" ? "user" : "admin" })
               }
@@ -53,12 +53,16 @@ function UserRow({ user, isSelf }: { user: PublicUser; isSelf: boolean }) {
                 ? `Revoke admin from ${user.username}`
                 : `Make ${user.username} admin`}
             </button>
-            <button type="button" className="underline" onClick={() => setTransferring((v) => !v)}>
+            <button
+              type="button"
+              className={linkButtonClass}
+              onClick={() => setTransferring((v) => !v)}
+            >
               Transfer ownership to {user.username}
             </button>
             <button
               type="button"
-              className="text-red-700 underline dark:text-red-400"
+              className={`${linkButtonClass} text-danger hover:text-danger`}
               onClick={() => {
                 if (window.confirm(`Delete ${user.username} and all of their slots?`))
                   remove.mutate(user.id);
@@ -112,9 +116,10 @@ export function UsersPage() {
       <SuccessNotice message={saved} />
       <ErrorNotice error={update.error} />
       {settings.data ? (
-        <label className="flex items-center gap-3">
+        <label className="flex min-h-11 items-center gap-3">
           <input
             type="checkbox"
+            className="accent-accent"
             checked={registrationEnabled}
             onChange={(e) => {
               const next = e.target.checked;
@@ -135,13 +140,13 @@ export function UsersPage() {
           />
           <span>
             <span className="font-medium">Allow new registrations</span>
-            <span className="block text-sm opacity-70">
+            <span className="block text-ink-muted text-sm">
               When off, the sign-in page no longer offers an account link.
             </span>
           </span>
         </label>
       ) : null}
-      {users.isPending ? <p className="text-sm opacity-70">Loading…</p> : null}
+      {users.isPending ? <p className="text-ink-muted text-sm">Loading…</p> : null}
       <ul className="flex flex-col gap-2">
         {users.data?.map((u) => (
           <UserRow key={u.id} user={u} isSelf={u.id === me.data?.id} />
