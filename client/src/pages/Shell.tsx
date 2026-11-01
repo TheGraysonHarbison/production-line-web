@@ -5,6 +5,7 @@ import { MobileHeader, TabBar } from "../components/MobileChrome.tsx";
 import { PrintersDrawer } from "../components/PrintersDrawer.tsx";
 import { Rail } from "../components/Rail.tsx";
 import { SlotEditor } from "../components/SlotEditor.tsx";
+import { Toasts } from "../components/Toasts.tsx";
 import { useMe } from "../lib/auth.tsx";
 import { EditorProvider } from "../lib/editor.tsx";
 import { useEventStream } from "../lib/stream.ts";
@@ -53,6 +54,7 @@ export function Shell() {
           </div>
         )}
         <SlotEditor sheet={viewport === "mobile"} />
+        <Toasts />
       </EditorProvider>
     </ThemeProvider>
   );

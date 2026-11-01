@@ -6,6 +6,8 @@ import { openDatabase } from "./db/connection.js";
 import { migrate } from "./db/migrate.js";
 import { AppEvents } from "./events.js";
 import { Broadcaster } from "./services/broadcaster.js";
+import { ExpiryScheduler } from "./services/expiry.js";
+import { HaClient } from "./services/ha.js";
 import { PrintersService } from "./services/printers.js";
 import { SessionsService } from "./services/sessions.js";
 import { SettingsService } from "./services/settings.js";
@@ -24,6 +26,9 @@ export interface AppContext {
   printers: PrintersService;
   slots: SlotsService;
   broadcaster: Broadcaster;
+  ha: HaClient;
+  /** Started by `index.ts` after the app is built; tests drive it by hand. */
+  expiry: ExpiryScheduler;
   log: Logger;
 }
 
@@ -67,6 +72,9 @@ export function createContext(config: Config, log: Logger): AppContext {
   });
   events.on("user.deleted", ({ user }) => broadcaster.closeForUser(user.id));
 
+  const ha = new HaClient(settings, log);
+  const expiry = new ExpiryScheduler({ slots, settings, ha, log });
+
   return {
     config,
     dataDir,
@@ -78,11 +86,15 @@ export function createContext(config: Config, log: Logger): AppContext {
     printers,
     slots,
     broadcaster,
+    ha,
+    expiry,
     log,
   };
 }
 
+/** Synchronous teardown for tests; the app's onClose hook does the awaited version. */
 export function closeContext(ctx: AppContext): void {
+  void ctx.expiry.stop();
   ctx.broadcaster.stop();
   ctx.db.close();
 }

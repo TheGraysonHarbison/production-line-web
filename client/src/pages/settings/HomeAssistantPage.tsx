@@ -6,12 +6,18 @@ import {
   linkButtonClass,
   secondaryButtonClass,
 } from "../../components/Field.tsx";
-import { ErrorNotice, SuccessNotice } from "../../components/Notice.tsx";
-import { useSettings, useUpdateSettings } from "../../lib/data.ts";
+import {
+  ErrorNotice,
+  errorNoticeClass,
+  SuccessNotice,
+  successNoticeClass,
+} from "../../components/Notice.tsx";
+import { useHaTest, useSettings, useUpdateSettings } from "../../lib/data.ts";
 
 export function HomeAssistantPage() {
   const settings = useSettings();
   const update = useUpdateSettings();
+  const haTest = useHaTest();
   const [enabled, setEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
@@ -44,6 +50,12 @@ export function HomeAssistantPage() {
 
   if (!settings.data) return <p className="text-ink-muted text-sm">Loading…</p>;
   const tokenSet = settings.data.ha_token.set;
+  const configured = tokenSet && settings.data.ha_base_url !== null;
+  const unsaved =
+    enabled !== settings.data.ha_enabled ||
+    baseUrl.trim() !== (settings.data.ha_base_url ?? "") ||
+    token !== "";
+  const testResult = haTest.data;
 
   return (
     <form onSubmit={save} className="flex flex-col gap-6">
@@ -112,15 +124,45 @@ export function HomeAssistantPage() {
         <button
           type="button"
           className={secondaryButtonClass}
-          disabled
-          title="Available in a later version"
+          disabled={!configured || haTest.isPending}
+          onClick={() => haTest.mutate()}
+          title={
+            configured
+              ? "Fire a production_line_test event with the saved URL and token"
+              : "Save a base URL and token first"
+          }
         >
-          Test
+          {haTest.isPending ? "Testing…" : "Test"}
         </button>
         <span className="text-ink-muted text-sm">
-          Test delivery is available in a later version.
+          {configured
+            ? unsaved
+              ? "Test uses the saved URL and token; save your changes first."
+              : "Fires a production_line_test event."
+            : "Save a base URL and token to test."}
         </span>
       </div>
+      {testResult ? (
+        testResult.ok ? (
+          <p className={successNoticeClass} role="status" data-testid="ha-test-result">
+            Home Assistant accepted the test event (HTTP {testResult.status}). Look for{" "}
+            <code className="rounded bg-accent-soft px-1 text-ink">production_line_test</code> under
+            Developer tools → Events.
+          </p>
+        ) : (
+          <p className={errorNoticeClass} role="alert" data-testid="ha-test-result">
+            {testResult.status === null
+              ? `Could not reach Home Assistant: ${testResult.error ?? "no response"}.`
+              : testResult.status === 401 || testResult.status === 403
+                ? `Home Assistant rejected the token (HTTP ${testResult.status}).`
+                : `Home Assistant answered HTTP ${testResult.status}.`}
+          </p>
+        )
+      ) : null}
+      <ErrorNotice
+        error={haTest.error}
+        map={{ ha_not_configured: "Save a base URL and token first." }}
+      />
     </form>
   );
 }

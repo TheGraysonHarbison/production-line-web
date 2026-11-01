@@ -1,4 +1,6 @@
-import { PublicSettingsSchema } from "@production-line/shared";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { HaTestResultSchema, PublicSettingsSchema } from "@production-line/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { request, seedRoles } from "./auth-helpers.js";
 import { createTestApp, type TestApp } from "./helpers.js";
@@ -115,12 +117,58 @@ describe("/api/settings", () => {
     expect(JSON.stringify(events)).not.toContain("very-secret");
   });
 
-  it("the HA test endpoint is reserved until delivery exists", async () => {
-    expect(
-      (await request(t, "POST", "/api/settings/ha/test", { cookie: roles.user.cookie })).statusCode,
-    ).toBe(403);
-    const res = await request(t, "POST", "/api/settings/ha/test", { cookie: roles.admin.cookie });
-    expect(res.statusCode).toBe(501);
-    expect(res.json().error).toBe("not_implemented");
+  describe("POST /settings/ha/test", () => {
+    let ha: Server | null = null;
+    const seen: { path: string; auth: string | undefined }[] = [];
+    const startHa = async (status: number) => {
+      ha = createServer((req, res) => {
+        seen.push({ path: req.url ?? "", auth: req.headers.authorization });
+        req.resume();
+        req.on("end", () => {
+          res.writeHead(status, { "content-type": "application/json" });
+          res.end("{}");
+        });
+      });
+      await new Promise<void>((r) => ha?.listen(0, "127.0.0.1", r));
+      return `http://127.0.0.1:${(ha.address() as AddressInfo).port}`;
+    };
+    afterEach(async () => {
+      if (ha) await new Promise<void>((r) => ha?.close(() => r()));
+      ha = null;
+      seen.length = 0;
+    });
+
+    it("is admin-only and refuses until URL and token are set", async () => {
+      expect(
+        (await request(t, "POST", "/api/settings/ha/test", { cookie: roles.user.cookie }))
+          .statusCode,
+      ).toBe(403);
+      const res = await request(t, "POST", "/api/settings/ha/test", { cookie: roles.admin.cookie });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe("ha_not_configured");
+    });
+
+    it("fires production_line_test with the stored token and reports HA's status", async () => {
+      const url = await startHa(200);
+      await request(t, "PATCH", "/api/settings", {
+        cookie: roles.admin.cookie,
+        body: { ha_base_url: url, ha_token: "llat-123" },
+      });
+      const res = await request(t, "POST", "/api/settings/ha/test", { cookie: roles.admin.cookie });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(HaTestResultSchema.parse(res.json())).toEqual({ ok: true, status: 200, error: null });
+      expect(seen).toEqual([{ path: "/api/events/production_line_test", auth: "Bearer llat-123" }]);
+    });
+
+    it("reports a rejected token as not ok with the status, still HTTP 200", async () => {
+      const url = await startHa(401);
+      await request(t, "PATCH", "/api/settings", {
+        cookie: roles.admin.cookie,
+        body: { ha_base_url: url, ha_token: "wrong" },
+      });
+      const res = await request(t, "POST", "/api/settings/ha/test", { cookie: roles.admin.cookie });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ ok: false, status: 401, error: "HTTP 401" });
+    });
   });
 });

@@ -4,6 +4,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import { meQueryKey, metaQueryKey } from "./auth.tsx";
 import { printersQueryKey, settingsQueryKey, slotsQueryKey, usersQueryKey } from "./data.ts";
+import { pushToast } from "./toast.ts";
 
 export type StreamStatus = "connecting" | "live" | "reconnecting" | "closed";
 
@@ -67,9 +68,18 @@ export function applyStreamEvent(
       upsertSlot(qc, (data as { slot: Slot }).slot);
       break;
     case "slot.deleted":
-    case "slot.expired":
       removeSlot(qc, (data as { slot: Slot }).slot.id);
       break;
+    case "slot.expired": {
+      const slot = (data as { slot: Slot }).slot;
+      removeSlot(qc, slot.id);
+      // Dev doc §3.4 / roadmap Phase 8: the owner, if online, gets a small note.
+      if (slot.user.id === meId) {
+        const names = slot.printers.map((p) => p.name).join(", ");
+        pushToast(`${slot.name} finished${names ? ` on ${names}` : ""} and left the schedule.`);
+      }
+      break;
+    }
     case "printer.created":
     case "printer.updated": {
       const printer = (data as { printer: Printer }).printer;
