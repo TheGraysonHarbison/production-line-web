@@ -201,6 +201,54 @@ test.describe("desktop scheduling", () => {
       .first()
       .click();
     await expect(dialog.getByLabel("End time")).toHaveValue("08:30");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+
+    // Drag the left edge from 06:00 to 05:30.
+    box = await measure();
+    const startHandle = lane.getByTestId("resize-start-handle").first();
+    const sh = (await startHandle.boundingBox()) as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    await page.mouse.move(sh.x + sh.width / 2, sh.y + sh.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(await xFor(page, box, "5 AM", 45), y, { steps: 5 });
+    await page.mouse.move(await xFor(page, box, "5 AM", 30), y, { steps: 5 });
+    await page.mouse.up();
+    const ourCard = page
+      .getByTestId("slot-card")
+      .filter({ hasText: `${slotName}-v2` })
+      .first();
+    await expect.poll(async () => (await ourCard.getAttribute("title")) ?? "").toMatch(/5:30/);
+    await ourCard.click();
+    await expect(dialog.getByLabel("Start time")).toHaveValue("05:30");
+    await expect(dialog.getByLabel("End time")).toHaveValue("08:30");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+
+    // Drag the card body half an hour earlier: 05:30–08:30 → 05:00–08:00 (later would hit the
+    // 09:00 booking and be refused). A plain click still opens it.
+    box = await measure();
+    const cb = (await ourCard.boundingBox()) as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    const grabX = cb.x + cb.width / 2;
+    await page.mouse.move(grabX, cb.y + cb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grabX - 15 * PX_PER_MINUTE, y, { steps: 5 });
+    await page.mouse.move(grabX - 30 * PX_PER_MINUTE, y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(async () => (await ourCard.getAttribute("title")) ?? "").toMatch(/5:00 AM/);
+    await ourCard.click();
+    await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
+    await expect(dialog.getByLabel("Start time")).toHaveValue("05:00");
+    await expect(dialog.getByLabel("End time")).toHaveValue("08:00");
 
     // Delete from the editor.
     await dialog.getByRole("button", { name: "Delete" }).click();
@@ -215,7 +263,10 @@ test.describe("desktop scheduling", () => {
     await watcher.context().close();
   });
 
-  test("a running slot keeps its start locked and can be extended", async ({ page, baseURL }) => {
+  test("a running slot has no start handle and cannot be dragged, but opens on click", async ({
+    page,
+    baseURL,
+  }) => {
     await signInAsOwner(page);
     const printer = await addPrinter(page, `Run-${suffix()}`, baseURL as string);
     const floorNow = new Date(Math.floor(Date.now() / 300_000) * 300_000);
@@ -243,6 +294,11 @@ test.describe("desktop scheduling", () => {
     const card = page.getByTestId("slot-card").filter({ hasText: name });
     await expect(card).toHaveAttribute("data-running", "true");
     await expect(page.getByTestId("now-line").first()).toBeVisible();
+    const lane = page
+      .getByTestId("lane")
+      .filter({ has: page.getByText(printer.name, { exact: true }) });
+    await expect(lane.getByTestId("resize-handle")).toHaveCount(1);
+    await expect(lane.getByTestId("resize-start-handle")).toHaveCount(0);
     await card.click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByLabel("Start time")).toBeDisabled();

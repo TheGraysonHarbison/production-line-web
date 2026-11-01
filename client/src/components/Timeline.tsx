@@ -40,7 +40,8 @@ interface TimelineProps {
   orientation?: Orientation;
   onCreate: (range: DragRange) => void;
   onOpen: (slot: Slot) => void;
-  onResize: (slot: Slot, end_at: string) => void;
+  /** A drag changed the slot's start and/or end (resize either edge, or move the whole slot). */
+  onChange: (slot: Slot, patch: { start_at?: string; end_at?: string }) => void;
 }
 
 export function minuteToX(minute: number): number {
@@ -51,7 +52,7 @@ export function xToMinute(x: number): number {
 }
 
 interface DragState {
-  kind: "create" | "resize";
+  kind: "create" | "resize-end" | "resize-start" | "move";
   printer: Printer;
   slot?: Slot;
   anchor: number;
@@ -61,9 +62,10 @@ interface DragState {
 
 /**
  * Day timeline (dev doc §11.2): one lane per printer, hour ticks, hatched past, current-time line,
- * drag-to-create on empty lane space, drag-to-resize on your own cards. A tap without movement
- * books an hour at that time (the touch equivalent of dragging); keyboard users create via the
- * per-lane "Book" button and resize through the editor.
+ * drag-to-create on empty lane space, drag either edge of your own cards to change start/end, and
+ * drag a card's body to move it (mouse/pen only: on touch a tap opens the editor instead, so the
+ * page still scrolls). A tap without movement books an hour at that time; keyboard users create
+ * via the per-lane "Book" button and change times through the editor.
  */
 export function Timeline({
   date,
@@ -74,7 +76,7 @@ export function Timeline({
   orientation = "horizontal",
   onCreate,
   onOpen,
-  onResize,
+  onChange,
 }: TimelineProps) {
   const vertical = orientation === "vertical";
   const tz = useTimeZone();
@@ -107,13 +109,49 @@ export function Timeline({
   };
 
   const onHandlePointerDown =
-    (printer: Printer, slot: Slot) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+    (printer: Printer, slot: Slot, edge: "start" | "end") =>
+    (e: ReactPointerEvent<HTMLButtonElement>) => {
       if (e.button !== 0) return;
       e.stopPropagation();
       e.currentTarget.setPointerCapture(e.pointerId);
-      const m = minutesInto(slot.end_at, bounds.from);
-      setDrag({ kind: "resize", printer, slot, anchor: m, current: m, moved: false });
+      const m = minutesInto(edge === "end" ? slot.end_at : slot.start_at, bounds.from);
+      setDrag({
+        kind: edge === "end" ? "resize-end" : "resize-start",
+        printer,
+        slot,
+        anchor: m,
+        current: m,
+        moved: false,
+      });
     };
+
+  const onCardPointerDown =
+    (printer: Printer, slot: Slot) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+      if (e.button !== 0 || e.pointerType === "touch") return;
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const m = snapMinutes(minuteAt(printer.id, e.clientX, e.clientY));
+      setDrag({ kind: "move", printer, slot, anchor: m, current: m, moved: false });
+    };
+
+  /** Where a slot sits right now, in minutes into the day, including any in-progress drag. */
+  const displayRange = (slot: Slot): { start: number; end: number } => {
+    let start = minutesInto(slot.start_at, bounds.from);
+    let end = minutesInto(slot.end_at, bounds.from);
+    if (drag?.slot?.id === slot.id) {
+      if (drag.kind === "resize-end") end = Math.max(drag.current, start + 5);
+      else if (drag.kind === "resize-start") start = Math.min(drag.current, end - 5);
+      else if (drag.kind === "move") {
+        // Keep the slot inside the day unless it already crossed midnight.
+        let delta = drag.current - drag.anchor;
+        if (start >= 0) delta = Math.max(delta, -start);
+        if (end <= bounds.minutes) delta = Math.min(delta, bounds.minutes - end);
+        start += delta;
+        end += delta;
+      }
+    }
+    return { start, end };
+  };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
     if (!drag) return;
@@ -136,10 +174,15 @@ export function Timeline({
         start_at: isoFromMs(Date.parse(bounds.from) + start * 60_000),
         end_at: isoFromMs(Date.parse(bounds.from) + end * 60_000),
       });
-    } else if (drag.slot && drag.moved) {
-      const startMinute = minutesInto(drag.slot.start_at, bounds.from);
-      const end = Math.max(drag.current, startMinute + 5);
-      onResize(drag.slot, isoFromMs(Date.parse(bounds.from) + end * 60_000));
+    } else if (drag.slot && !drag.moved) {
+      // A click (no movement) on a card opens it.
+      if (drag.kind === "move") onOpen(drag.slot);
+    } else if (drag.slot) {
+      const { start, end } = displayRange(drag.slot);
+      const iso = (m: number) => isoFromMs(Date.parse(bounds.from) + m * 60_000);
+      if (drag.kind === "resize-end") onChange(drag.slot, { end_at: iso(end) });
+      else if (drag.kind === "resize-start") onChange(drag.slot, { start_at: iso(start) });
+      else onChange(drag.slot, { start_at: iso(start), end_at: iso(end) });
     }
   };
 
@@ -202,46 +245,72 @@ export function Timeline({
           />
         ))}
         {laneSlots.map((slot) => {
-          const start = Math.max(minutesInto(slot.start_at, bounds.from), 0);
-          const end = Math.min(minutesInto(slot.end_at, bounds.from), bounds.minutes);
+          const range = displayRange(slot);
+          const start = Math.max(range.start, 0);
+          const end = Math.min(range.end, bounds.minutes);
           const editable = canEditSlot(me.data, slot);
           const running = slotIsRunning(slot, now);
-          const resizing =
-            drag?.kind === "resize" && drag.slot?.id === slot.id ? drag.current : null;
-          const endPx = minuteToX(resizing ?? end);
+          // A running slot's start is locked (dev doc §3.3), so it can neither move nor grow left.
+          const movable = editable && !running;
+          const startPx = minuteToX(start);
+          const endPx = minuteToX(end);
+          const handleClass = `absolute opacity-0 hover:opacity-100 focus:opacity-100 ${
+            vertical ? "inset-x-1 h-2 cursor-ns-resize" : "inset-y-1 w-2 cursor-ew-resize"
+          }`;
+          const handleEvents = {
+            onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => {
+              e.stopPropagation();
+              onPointerMove(e);
+            },
+            onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
+              e.stopPropagation();
+              onPointerUp();
+            },
+          };
           return (
             <div key={slot.id} className="contents">
               <SlotCard
                 slot={slot}
                 editable={editable}
                 running={running}
+                movable={movable}
                 onOpen={onOpen}
-                offset={minuteToX(start)}
-                length={endPx - minuteToX(start)}
+                offset={startPx}
+                length={endPx - startPx}
                 vertical={vertical}
+                onPointerDown={movable ? onCardPointerDown(printer, slot) : undefined}
+                onPointerMove={movable ? handleEvents.onPointerMove : undefined}
+                onPointerUp={movable ? handleEvents.onPointerUp : undefined}
+                dragging={drag?.kind === "move" && drag.slot?.id === slot.id && drag.moved}
               />
+              {movable ? (
+                <button
+                  type="button"
+                  className={`${handleClass} ${vertical ? "rounded-t-md" : "rounded-l-md"}`}
+                  style={{
+                    ...along(startPx),
+                    backgroundColor: slot.user.color,
+                    touchAction: "none",
+                  }}
+                  onPointerDown={onHandlePointerDown(printer, slot, "start")}
+                  {...handleEvents}
+                  aria-label={`Drag to change the start of ${slot.name}`}
+                  title="Drag to change the start time"
+                  data-testid="resize-start-handle"
+                  data-geometry="time"
+                />
+              ) : null}
               {editable ? (
                 <button
                   type="button"
-                  className={`absolute opacity-0 hover:opacity-100 focus:opacity-100 ${
-                    vertical
-                      ? "inset-x-1 h-2 cursor-ns-resize rounded-b-md"
-                      : "inset-y-1 w-2 cursor-ew-resize rounded-r-md"
-                  }`}
+                  className={`${handleClass} ${vertical ? "rounded-b-md" : "rounded-r-md"}`}
                   style={{
                     ...along(endPx - 8),
                     backgroundColor: slot.user.color,
                     touchAction: "none",
                   }}
-                  onPointerDown={onHandlePointerDown(printer, slot)}
-                  onPointerMove={(e) => {
-                    e.stopPropagation();
-                    onPointerMove(e);
-                  }}
-                  onPointerUp={(e) => {
-                    e.stopPropagation();
-                    onPointerUp();
-                  }}
+                  onPointerDown={onHandlePointerDown(printer, slot, "end")}
+                  {...handleEvents}
                   aria-label={`Drag to change the end of ${slot.name}`}
                   title="Drag to change the end time"
                   data-testid="resize-handle"

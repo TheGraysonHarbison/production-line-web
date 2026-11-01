@@ -11,8 +11,9 @@ import { useTimeZone } from "../lib/prefs.ts";
 import { addDays, dayBounds, formatDate, todayPlainDate } from "../lib/time.ts";
 import { useViewport } from "../lib/viewport.ts";
 
-const RESIZE_ERRORS: Record<string, string> = {
+const DRAG_ERRORS: Record<string, string> = {
   conflict: "That would overlap another booking.",
+  slot_in_past: "A slot can't be moved into the past.",
   slot_running_start_locked: "A running slot's start can't move.",
   slot_beyond_horizon: "Slots can end at most 30 days from now.",
 };
@@ -48,16 +49,16 @@ export function DayPage() {
   const today = todayPlainDate(tz);
   const onCreate = (r: DragRange) =>
     editor.openCreate({ start_at: r.start_at, end_at: r.end_at, printer_ids: [r.printer.id] });
-  const onResize = (slot: Slot, end_at: string) => {
+  const onChange = (slot: Slot, patch: { start_at?: string; end_at?: string }) => {
     setNotice(null);
     update.mutate(
-      { id: slot.id, end_at },
+      { id: slot.id, ...patch },
       {
         onError: (err) => {
           const code = err instanceof ApiError ? err.code : "error";
           setNotice(
             err instanceof ApiError
-              ? (RESIZE_ERRORS[code] ?? err.message)
+              ? (DRAG_ERRORS[code] ?? err.message)
               : "Could not change the slot.",
           );
         },
@@ -117,13 +118,13 @@ export function DayPage() {
           orientation={vertical ? "vertical" : "horizontal"}
           onCreate={onCreate}
           onOpen={editor.openEdit}
-          onResize={onResize}
+          onChange={onChange}
         />
       ) : null}
       <p className="text-ink-muted text-xs">
         {vertical
           ? "Tap a free spot in a printer's column to book an hour there, or tap a printer's name. Open a slot to change its times."
-          : "Drag on a lane to book, drag a card's right edge to change its end, or use the Book buttons and the editor for keyboard access."}
+          : "Drag on a lane to book, drag a card to move it, drag either edge to change its start or end, or use the Book buttons and the editor for keyboard access."}
       </p>
     </main>
   );
