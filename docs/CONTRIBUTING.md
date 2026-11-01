@@ -55,6 +55,12 @@ On a host where `localhost` resolves to IPv6 first, test with `http://127.0.0.1:
 - Times are rounded to the nearest 5 minutes on the server, so a client may send "now". Rules: start not before the current 5-minute mark (so "start now" is always accepted), end after start, at least 5 minutes, end within 30 days. A running slot's start is locked; its end may be extended up to the next slot on each of its printers.
 - Deleting a slot goes through `SlotsService.delete(id, reason)` (`manual` | `expired` | `user_deleted`); later phases register cleanup hooks there with `onDelete()`.
 
+## Expiry and Home Assistant
+
+- `server/src/services/expiry.ts` is the only thing that deletes slots on the server's own initiative. `index.ts` starts it after `listen()` (catch-up pass, then a 30 s tick); the app's `onClose` hook awaits `stop()`, which finishes the slot in flight and leaves the rest for the next boot's catch-up. Tests never start it implicitly: `createTestApp()` leaves `ctx.expiry` idle and tests call `run()`/`start()` themselves, usually under `vi.useFakeTimers`.
+- `server/src/services/ha.ts` is the Home Assistant client. The event type is a parameter of `fire()` so a start event (Phase 14) reuses the retry/backoff path. `fetch` and the backoff delays are injectable for tests; production uses the global fetch with a 10 s per-attempt timeout. `fire()` never throws: failures come back as a result and the final one is logged as `ha.delivery_failed` with the payload. The payload builder is the only server-side timezone math (Temporal via `temporal-polyfill`, same as the client); keep it that way.
+- `POST /api/settings/ha/test` fires once (no retries) and always answers 200 with `{ ok, status, error }` when it could attempt delivery, 400 `ha_not_configured` otherwise, so the settings page can show HA's actual status.
+
 ## Theme and layouts
 
 - The signed-in user's color seeds the chrome (`client/src/theme/palette.ts`, pure and unit-tested): hex → OKLCH → `--accent`, `--accent-soft`, `--accent-strong`, `--on-accent` with the hue fixed. Lightness is clamped to a per-scheme band and nudged until near-black or near-white text reaches 4.5:1. The raw pick is never altered for identity (avatars, slot and calendar bars). `ThemeProvider` writes both schemes onto `:root` through the CSSOM (no inline styles, so the strict CSP holds); `index.css` picks per `prefers-color-scheme` and exposes them to Tailwind as `bg-accent`, `text-ink`, `border-line`, and so on. Never hard-code `neutral-*` / `dark:` classes in components.

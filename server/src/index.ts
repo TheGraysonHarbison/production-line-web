@@ -7,8 +7,9 @@ const config = loadConfig();
 const log = pino({ level: config.logLevel });
 
 let app: Awaited<ReturnType<typeof buildApp>>;
+let ctx: ReturnType<typeof createContext>;
 try {
-  const ctx = createContext(config, log);
+  ctx = createContext(config, log);
   app = await buildApp({ ctx });
 } catch (err) {
   log.fatal({ err }, "startup failed");
@@ -29,3 +30,7 @@ try {
   app.log.error(err);
   process.exit(1);
 }
+
+// Catch-up pass for slots that expired while we were down, then the 30 s tick (dev doc §3.4).
+// Not awaited: a slow Home Assistant must not delay serving requests.
+void ctx.expiry.start();

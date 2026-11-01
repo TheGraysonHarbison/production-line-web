@@ -110,3 +110,52 @@ test("owner promotes a user to admin; the admin sees admin tabs but not Users", 
   await expect(other).toHaveURL(/\/settings\/profile$/);
   await other.context().close();
 });
+
+test("admin tests Home Assistant delivery against a mock instance", async ({ page }) => {
+  // A stand-in Home Assistant: records the event it receives and answers 200.
+  const { createServer } = await import("node:http");
+  const received: { path: string; auth: string | undefined }[] = [];
+  const ha = createServer((req, res) => {
+    received.push({ path: req.url ?? "", auth: req.headers.authorization });
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"message":"Event production_line_test fired."}');
+    });
+  });
+  await new Promise<void>((r) => ha.listen(0, "127.0.0.1", r));
+  const port = (ha.address() as { port: number }).port;
+
+  try {
+    await signInAsOwner(page);
+    await page.goto("/settings/home-assistant");
+    // Nothing saved yet: Test is disabled with a hint.
+    const testButton = page.getByRole("button", { name: "Test" });
+    await expect(testButton).toBeDisabled();
+    await page.getByLabel("Base URL").fill(`http://127.0.0.1:${port}`);
+    await page.getByLabel("Long-lived access token").fill("llat-e2e-token");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("status")).toHaveText(/saved/i);
+    await expect(page.getByTestId("ha-token-status")).toHaveText("set");
+
+    await expect(testButton).toBeEnabled();
+    await testButton.click();
+    const result = page.getByTestId("ha-test-result");
+    await expect(result).toContainText("accepted the test event (HTTP 200)");
+    expect(received).toEqual([
+      { path: "/api/events/production_line_test", auth: "Bearer llat-e2e-token" },
+    ]);
+
+    // Stop the mock: the next test reports an unreachable instance instead of hanging.
+    await new Promise<void>((r) => ha.close(() => r()));
+    await testButton.click();
+    await expect(result).toContainText(/could not reach home assistant/i);
+
+    // Clear the token so later runs start clean.
+    await page.getByRole("button", { name: "Clear token" }).click();
+    await expect(page.getByTestId("ha-token-status")).toHaveText("not set");
+    await expect(testButton).toBeDisabled();
+  } finally {
+    ha.close();
+  }
+});

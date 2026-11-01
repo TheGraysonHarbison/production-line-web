@@ -1,6 +1,10 @@
-import { type PublicSettings, UpdateSettingsBodySchema } from "@production-line/shared";
+import {
+  type HaTestResult,
+  type PublicSettings,
+  UpdateSettingsBodySchema,
+} from "@production-line/shared";
 import type { FastifyPluginAsync } from "fastify";
-import { forbidden, HttpError } from "../errors.js";
+import { forbidden } from "../errors.js";
 import { requireRole } from "../plugins/auth.js";
 
 export const settingsRoutes: FastifyPluginAsync = async (app) => {
@@ -22,12 +26,17 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // Fires a test event at Home Assistant once the HA client exists (Phase 8).
-  app.post("/settings/ha/test", { preHandler: requireRole("admin") }, async () => {
-    throw new HttpError(
-      501,
-      "not_implemented",
-      "Home Assistant delivery arrives in a later version",
-    );
-  });
+  // Fires `production_line_test` once and reports what Home Assistant answered (dev doc §7).
+  app.post(
+    "/settings/ha/test",
+    { preHandler: requireRole("admin") },
+    async (request): Promise<HaTestResult> => {
+      const r = await app.ctx.ha.test();
+      request.log.info(
+        { by: request.user?.id, httpStatus: r.httpStatus, ok: r.status === "sent" },
+        "ha.test",
+      );
+      return { ok: r.status === "sent", status: r.httpStatus, error: r.error };
+    },
+  );
 };

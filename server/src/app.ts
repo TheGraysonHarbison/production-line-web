@@ -54,7 +54,9 @@ export async function buildApp(options: BuildAppOptions) {
     fp(
       async (instance) => {
         instance.decorate("ctx", ctx);
+        // Graceful shutdown (dev doc §3.4): finish the slot in flight, drop streams, close the DB.
         instance.addHook("onClose", async () => {
+          await ctx.expiry.stop();
           ctx.broadcaster.stop();
           ctx.db.close();
         });

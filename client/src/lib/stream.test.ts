@@ -1,9 +1,10 @@
 import type { Printer, Slot } from "@production-line/shared";
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { meQueryKey } from "./auth.tsx";
 import { printersQueryKey, slotsQueryKey, usersQueryKey } from "./data.ts";
 import { applyStreamEvent } from "./stream.ts";
+import { clearToasts, dismissToast, getToasts } from "./toast.ts";
 
 const user = { id: 1, username: "sam", color: "#4f9cff", role: "user" as const, avatar_url: null };
 const printer = (id: number, name: string): Printer => ({
@@ -94,5 +95,27 @@ describe("applyStreamEvent", () => {
     expect(qc.getQueryData(meQueryKey)).not.toBeNull();
     applyStreamEvent(qc, "user.deleted", { user }, 1);
     expect(qc.getQueryData(meQueryKey)).toBeNull();
+  });
+});
+
+describe("expiry toast", () => {
+  // Earlier tests in this file expire slots too; start from an empty store.
+  beforeEach(() => clearToasts());
+  afterEach(() => clearToasts());
+
+  it("tells the owner, and only the owner, when their slot expires", () => {
+    const qc = new QueryClient();
+    const key = slotsQueryKey.range("2026-11-02T00:00:00.000Z", "2026-11-03T00:00:00.000Z");
+    const s = slot(7, "2026-11-02T10:00:00.000Z", "2026-11-02T11:00:00.000Z");
+    qc.setQueryData(key, [s]);
+    // Someone else's slot: removed, no toast.
+    applyStreamEvent(qc, "slot.expired", { slot: s }, 99);
+    expect(qc.getQueryData(key)).toEqual([]);
+    expect(getToasts()).toEqual([]);
+    // Mine: a toast naming the slot and printer, dismissable.
+    applyStreamEvent(qc, "slot.expired", { slot: s }, 1);
+    expect(getToasts().map((t) => t.message)).toEqual(["S7 finished on P and left the schedule."]);
+    dismissToast(getToasts()[0]?.id ?? -1);
+    expect(getToasts()).toEqual([]);
   });
 });

@@ -45,3 +45,12 @@ export const UpdateSettingsBodySchema = z
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "nothing to update" });
 export type UpdateSettingsBody = z.infer<typeof UpdateSettingsBodySchema>;
+
+/** `POST /api/settings/ha/test` response: what Home Assistant answered to a `production_line_test` event. */
+export const HaTestResultSchema = z.object({
+  ok: z.boolean(),
+  /** HTTP status Home Assistant returned, or null when no response arrived. */
+  status: z.number().int().nullable(),
+  error: z.string().nullable(),
+});
+export type HaTestResult = z.infer<typeof HaTestResultSchema>;

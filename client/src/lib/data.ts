@@ -1,6 +1,7 @@
 import type {
   CreatePrinterBody,
   CreateSlotBody,
+  HaTestResult,
   Printer,
   PublicSettings,
   PublicUser,
@@ -90,6 +91,13 @@ export function useUpdateSettings() {
       qc.setQueryData(settingsQueryKey, settings);
       void qc.invalidateQueries({ queryKey: metaQueryKey });
     },
+  });
+}
+
+/** Fires `production_line_test` at Home Assistant with the saved URL and token. */
+export function useHaTest() {
+  return useMutation({
+    mutationFn: () => api<HaTestResult>("/api/settings/ha/test", { method: "POST" }),
   });
 }
 
