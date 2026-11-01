@@ -109,12 +109,26 @@ describe("/api/slots", () => {
         expect(res.statusCode, JSON.stringify(body)).toBe(400);
         expect(res.json().error, JSON.stringify(body)).toBe(code);
       }
-      // "Start now" rounds to the nearest mark and is accepted even when that mark just passed.
+      // "Start now" rounds to the nearest mark and is accepted even when that mark just passed,
+      // and so is the current mark itself (floor), which makes the slot running immediately.
       const now = await request(t, "POST", "/api/slots", {
         cookie: roles.user.cookie,
         body: { ...slotBody([p1], 0, 30), start_at: new Date().toISOString() },
       });
       expect(now.statusCode, now.body).toBe(201);
+      const floorNow = roundToFiveMinutes(new Date().toISOString(), "floor");
+      const running = await request(t, "POST", "/api/slots", {
+        cookie: roles.user.cookie,
+        body: { ...slotBody([p2], 0, 30), start_at: floorNow, end_at: at(30) },
+      });
+      expect(running.statusCode, running.body).toBe(201);
+      expect(running.json().start_at).toBe(floorNow);
+      const earlier = new Date(Date.parse(floorNow) - 5 * 60_000).toISOString();
+      const past = await request(t, "POST", "/api/slots", {
+        cookie: roles.user.cookie,
+        body: { ...slotBody([p2], 0, 30), start_at: earlier, end_at: at(40) },
+      });
+      expect(past.json().error).toBe("slot_in_past");
     });
 
     it("rejects unknown and invisible printers", async () => {

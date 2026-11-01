@@ -31,12 +31,12 @@ test("changes made in one browser appear live in another, without a reload", asy
   await signInAsOwner(page);
   await expect(page.getByTestId("stream-status")).toHaveAttribute("data-status", "live");
 
-  // A printer created in the owner's browser shows up on the watcher's home page.
+  // A printer created in the owner's browser shows up in the watcher's dock.
   const printerName = `Live-${suffix()}`;
   await page.goto("/settings/printers");
   await page.getByLabel("Printer name").fill(printerName);
   await page.getByRole("button", { name: "Add printer" }).click();
-  await expect(watcher.getByTestId("home-printers")).toContainText(printerName);
+  await expect(watcher.getByTestId("dock-printers")).toContainText(printerName);
 
   // A slot created through the API (no browser involved) shows up in both.
   const printers = await page.request.get("/api/printers");
@@ -54,9 +54,17 @@ test("changes made in one browser appear live in another, without a reload", asy
     },
   });
   expect(created.status()).toBe(201);
-  await page.goto("/");
-  await expect(page.getByTestId("home-slots")).toContainText(slotName);
-  await expect(watcher.getByTestId("home-slots")).toContainText(slotName);
+  const meta = await (await page.request.get("/api/meta")).json();
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: meta.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(start);
+  await page.goto(`/day/${date}`);
+  await watcher.goto(`/day/${date}`);
+  await expect(page.getByTestId("slot-card").filter({ hasText: slotName })).toBeVisible();
+  await expect(watcher.getByTestId("slot-card").filter({ hasText: slotName })).toBeVisible();
 
   // Deleting it via the API removes it live from the watcher.
   const slot = await created.json();
@@ -64,8 +72,8 @@ test("changes made in one browser appear live in another, without a reload", asy
     headers: { origin: baseURL as string },
   });
   expect(deleted.status()).toBe(204);
-  await expect(watcher.getByTestId("home-slots")).not.toContainText(slotName);
-  await expect(page.getByTestId("home-slots")).not.toContainText(slotName);
+  await expect(watcher.getByTestId("slot-card").filter({ hasText: slotName })).toHaveCount(0);
+  await expect(page.getByTestId("slot-card").filter({ hasText: slotName })).toHaveCount(0);
 
   await watcher.context().close();
 });

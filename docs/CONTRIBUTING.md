@@ -52,7 +52,7 @@ On a host where `localhost` resolves to IPv6 first, test with `http://127.0.0.1:
 ## Slots
 
 - The server is the only authority on conflicts. Clients may pre-filter printers for a range, but every create/update runs the per-printer overlap query inside a `BEGIN IMMEDIATE` transaction and answers `409 conflict` with the blocking slot per printer.
-- Times are rounded to the nearest 5 minutes on the server, so a client may send "now". Rules: start not before the current 5-minute mark, end after start, at least 5 minutes, end within 30 days. A running slot's start is locked; its end may be extended up to the next slot on each of its printers.
+- Times are rounded to the nearest 5 minutes on the server, so a client may send "now". Rules: start not before the current 5-minute mark (so "start now" is always accepted), end after start, at least 5 minutes, end within 30 days. A running slot's start is locked; its end may be extended up to the next slot on each of its printers.
 - Deleting a slot goes through `SlotsService.delete(id, reason)` (`manual` | `expired` | `user_deleted`); later phases register cleanup hooks there with `onDelete()`.
 
 ## Rules

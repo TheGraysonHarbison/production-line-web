@@ -97,7 +97,7 @@ describe("App routing", () => {
       },
     });
     renderAt("/");
-    expect(await screen.findByText("Hello, sam")).toBeInTheDocument();
+    expect(await screen.findByTestId("calendar")).toBeInTheDocument();
     const avatar = screen.getByRole("img", { name: "sam" });
     expect(avatar.textContent).toBe("s");
     expect(avatar).toHaveStyle({ backgroundColor: "#4f9cff" });

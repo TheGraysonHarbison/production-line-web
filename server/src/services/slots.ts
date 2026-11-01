@@ -280,7 +280,8 @@ export class SlotsService {
     if (end <= start) throw new HttpError(400, "slot_end_before_start", "end must be after start");
     if (end - start < SLOT_MIN_LENGTH_MS)
       throw new HttpError(400, "slot_too_short", "slots are at least 5 minutes");
-    if (opts.checkPast && start < Date.parse(roundToFiveMinutes(now.toISOString()))) {
+    // "Start now" may land on the current 5-minute mark (up to 5 minutes ago); earlier is the past.
+    if (opts.checkPast && start < Date.parse(roundToFiveMinutes(now.toISOString(), "floor"))) {
       throw new HttpError(400, "slot_in_past", "start cannot be in the past");
     }
     if (end > now.getTime() + SLOT_HORIZON_MS) {
