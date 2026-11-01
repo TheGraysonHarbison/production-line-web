@@ -9,7 +9,7 @@ import type {
   UpdateSettingsBody,
   UpdateSlotBody,
 } from "@production-line/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api.ts";
 import { metaQueryKey } from "./auth.tsx";
 
@@ -27,6 +27,8 @@ export function useSlotsRange(from: string, to: string) {
     queryKey: slotsQueryKey.range(from, to),
     queryFn: () =>
       api<Slot[]>(`/api/slots?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    // The timeline strip grows when you step into the past; keep cards up while it refetches.
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -182,11 +182,12 @@ test.describe("touch layouts", () => {
     const track = page
       .locator(`[data-testid="lane-body"][data-printer-id="${printer.id}"]`)
       .getByTestId("lane-track");
-    await track.evaluate((el) => el.scrollIntoView({ block: "start" }));
+    // The strip spans many days: pick tomorrow's 3 AM tick and bring it into the scroller's view.
     const tick = page
-      .getByTestId("tick")
+      .locator(`[data-testid="tick"][data-date="${date}"]`)
       .filter({ hasText: /^3 AM$/ })
       .first();
+    await tick.evaluate((el) => el.scrollIntoView({ block: "center" }));
     const tickTop = await tick.evaluate((el) => Number.parseFloat((el as HTMLElement).style.top));
     const trackBox = (await track.boundingBox()) as { x: number; y: number; width: number };
     // 3px past the tick is ~2 minutes, which floor-snaps to the hour.
