@@ -3,7 +3,7 @@ import { SLOT_HORIZON_MS } from "@production-line/shared";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../lib/api.ts";
 import { useMe } from "../lib/auth.tsx";
-import { usePrinters, useSlotMutations, useSlotsRange } from "../lib/data.ts";
+import { usePrinters, useSlot, useSlotMutations, useSlotsRange } from "../lib/data.ts";
 import { useEditor } from "../lib/editor.tsx";
 import { useTimeFormat, useTimeZone } from "../lib/prefs.ts";
 import { canEditSlot, findConflicts, slotIsRunning } from "../lib/slots.ts";
@@ -24,6 +24,7 @@ import {
 } from "./Field.tsx";
 import { CloseIcon } from "./Icons.tsx";
 import { errorNoticeClass } from "./Notice.tsx";
+import { SlotImages } from "./SlotImages.tsx";
 
 const ERROR_TEXT: Record<string, string> = {
   slot_in_past: "The start time is in the past.",
@@ -85,6 +86,9 @@ function EditorForm({ sheet }: { sheet: boolean }) {
   const printers = usePrinters();
   const { create, update, remove } = useSlotMutations();
   const editing = request.mode === "edit" ? request.slot : null;
+  // Images change outside this form (uploads, other sessions), so read the live copy for them.
+  const live = useSlot(editing?.id);
+  const liveSlot = live.data ?? editing;
   const defaults = request.mode === "create" ? request.defaults : undefined;
   const now = Date.now();
 
@@ -313,6 +317,8 @@ function EditorForm({ sheet }: { sheet: boolean }) {
           );
         })}
       </fieldset>
+
+      {liveSlot ? <SlotImages slot={liveSlot} canEdit={!readOnly} /> : null}
 
       {conflict ? (
         <div className={errorNoticeClass} role="alert">

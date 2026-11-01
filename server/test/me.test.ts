@@ -82,12 +82,14 @@ describe("/api/me", () => {
     ).toBe(200);
   });
 
-  it("avatar routes exist but are disabled until image support lands", async () => {
+  it("refuses avatar uploads while images are disabled; removal is always allowed", async () => {
     const owner = await setupOwner(t);
     const put = await request(t, "PUT", "/api/me/avatar", { cookie: owner.cookie, body: {} });
     expect(put.statusCode).toBe(403);
     expect(put.json().error).toBe("images_disabled");
+    // Nothing to remove yet, but the call succeeds and returns the profile.
     const del = await request(t, "DELETE", "/api/me/avatar", { cookie: owner.cookie });
-    expect(del.statusCode).toBe(403);
+    expect(del.statusCode).toBe(200);
+    expect(del.json().avatar_url).toBeNull();
   });
 });

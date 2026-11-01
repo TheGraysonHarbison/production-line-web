@@ -1,11 +1,12 @@
-import type { Me, TimeFormat } from "@production-line/shared";
+import { IMAGE_ACCEPT, IMAGE_MAX_BYTES, type Me, type TimeFormat } from "@production-line/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { Avatar } from "../components/Avatar.tsx";
-import { buttonClass, Field, inputClass } from "../components/Field.tsx";
+import { buttonClass, Field, inputClass, secondaryButtonClass } from "../components/Field.tsx";
 import { ErrorNotice, SuccessNotice } from "../components/Notice.tsx";
 import { ApiError, api } from "../lib/api.ts";
-import { meQueryKey, useMe } from "../lib/auth.tsx";
+import { meQueryKey, useMe, useMeta } from "../lib/auth.tsx";
+import { uploadFile } from "../lib/upload.ts";
 import { useTheme } from "../theme/theme.tsx";
 
 export function ProfilePage() {
@@ -52,6 +53,30 @@ export function ProfilePage() {
       setCurrentPassword("");
       setNewPassword("");
       setSaved("Password changed. Other devices were signed out.");
+    },
+  });
+
+  const meta = useMeta();
+  const [avatarProgress, setAvatarProgress] = useState<number | null>(null);
+  const avatar = useMutation({
+    mutationFn: async (file: File) => {
+      if (file.size > IMAGE_MAX_BYTES) {
+        throw new ApiError(413, { error: "image_too_large", message: "Larger than 10 MB." });
+      }
+      setAvatarProgress(0);
+      return uploadFile<Me>("/api/me/avatar", "PUT", file, { onProgress: setAvatarProgress });
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(meQueryKey, updated);
+      setSaved("Profile image updated.");
+    },
+    onSettled: () => setAvatarProgress(null),
+  });
+  const removeAvatar = useMutation({
+    mutationFn: () => api<Me>("/api/me/avatar", { method: "DELETE" }),
+    onSuccess: (updated) => {
+      qc.setQueryData(meQueryKey, updated);
+      setSaved("Profile image removed.");
     },
   });
 
@@ -133,6 +158,71 @@ export function ProfilePage() {
           </button>
         </div>
       </form>
+
+      <section
+        className="flex flex-col gap-4"
+        aria-labelledby="avatar-title"
+        data-testid="avatar-section"
+      >
+        <h3 id="avatar-title" className="font-medium text-lg">
+          Profile image
+        </h3>
+        <ErrorNotice
+          error={avatar.error ?? removeAvatar.error}
+          map={{
+            image_type_not_allowed: "Not a supported image (PNG, JPEG, TIFF, WEBP, or camera RAW).",
+            image_too_large: "Larger than 10 MB.",
+            images_disabled: "Image uploads are turned off.",
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-4">
+          <Avatar user={me.data} size={64} />
+          {meta.data?.images_enabled ? (
+            <>
+              <input
+                id="avatar-input"
+                type="file"
+                accept={IMAGE_ACCEPT}
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) avatar.mutate(file);
+                  e.target.value = "";
+                }}
+                data-testid="avatar-upload"
+              />
+              <label htmlFor="avatar-input" className={`${secondaryButtonClass} cursor-pointer`}>
+                {me.data.avatar_url ? "Replace image" : "Upload image"}
+              </label>
+              {avatarProgress !== null ? (
+                <progress
+                  className="h-2 w-32"
+                  value={avatarProgress}
+                  max={1}
+                  aria-label="Uploading"
+                />
+              ) : null}
+            </>
+          ) : (
+            <span className="text-ink-muted text-sm">
+              Image uploads are off. An admin can enable them under Settings → General.
+            </span>
+          )}
+          {me.data.avatar_url ? (
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => removeAvatar.mutate()}
+              disabled={removeAvatar.isPending}
+            >
+              Remove image
+            </button>
+          ) : null}
+        </div>
+        <p className="text-ink-muted text-sm">
+          Shown instead of your initial. PNG, JPEG, or WEBP display best; up to 10 MB.
+        </p>
+      </section>
 
       <form
         className="flex flex-col gap-4"

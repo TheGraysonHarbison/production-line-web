@@ -1,5 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { Me, PublicUser, Role, TimeFormat } from "@production-line/shared";
+import {
+  type Image,
+  imageUrl,
+  type Me,
+  type PublicUser,
+  type Role,
+  type TimeFormat,
+} from "@production-line/shared";
 import { withTransaction } from "../db/connection.js";
 import { HttpError } from "../errors.js";
 import type { AppEvents } from "../events.js";
@@ -13,8 +20,14 @@ export interface UserRow {
   role: Role;
   time_format: TimeFormat;
   avatar_image_id: number | null;
+  /** From the LEFT JOIN on images; null when there is no avatar. */
+  avatar_stored_name: string | null;
   created_at: string;
 }
+
+/** Every user read goes through this join so `avatar_url` can be derived without a lookup. */
+export const USER_SELECT =
+  "SELECT u.*, i.stored_name AS avatar_stored_name FROM users u LEFT JOIN images i ON i.id = u.avatar_image_id";
 
 export interface CreateUserInput {
   username: string;
@@ -47,8 +60,7 @@ export function toPublicUser(row: UserRow): PublicUser {
     username: row.username,
     color: row.color,
     role: row.role,
-    // Populated once image serving exists (Phase 9); clients render the initial-on-color default.
-    avatar_url: null,
+    avatar_url: row.avatar_stored_name ? imageUrl(row.avatar_stored_name) : null,
   };
 }
 
@@ -65,22 +77,25 @@ export class UsersService {
   private readonly insert;
   private readonly setRoleStmt;
   private readonly deleteStmt;
+  private readonly setAvatarStmt;
+  private readonly onDeleteHooks: ((payload: { user: PublicUser; images: Image[] }) => void)[] = [];
 
   constructor(
     private readonly db: DatabaseSync,
     private readonly events: AppEvents,
     private readonly slots: SlotsService,
   ) {
-    this.byId = db.prepare("SELECT * FROM users WHERE id = :id");
-    this.byUsername = db.prepare("SELECT * FROM users WHERE username = :username COLLATE NOCASE");
+    this.byId = db.prepare(`${USER_SELECT} WHERE u.id = :id`);
+    this.byUsername = db.prepare(`${USER_SELECT} WHERE u.username = :username COLLATE NOCASE`);
     this.countStmt = db.prepare("SELECT COUNT(*) AS n FROM users");
-    this.listStmt = db.prepare("SELECT * FROM users ORDER BY username COLLATE NOCASE");
+    this.listStmt = db.prepare(`${USER_SELECT} ORDER BY u.username COLLATE NOCASE`);
     this.insert = db.prepare(
       `INSERT INTO users (username, password_hash, color, role, created_at)
        VALUES (:username, :password_hash, :color, :role, :created_at)`,
     );
     this.setRoleStmt = db.prepare("UPDATE users SET role = :role WHERE id = :id");
     this.deleteStmt = db.prepare("DELETE FROM users WHERE id = :id");
+    this.setAvatarStmt = db.prepare("UPDATE users SET avatar_image_id = :image_id WHERE id = :id");
   }
 
   count(): number {
@@ -165,6 +180,20 @@ export class UsersService {
    * Deletes a user. FK cascades remove sessions, slots, slot_printers, and image rows (§3.1);
    * image files and per-slot events are handled by later phases via this same path.
    */
+  /** Runs after a user is deleted with every image row they uploaded (avatar included). */
+  onDelete(hook: (payload: { user: PublicUser; images: Image[] }) => void): void {
+    this.onDeleteHooks.push(hook);
+  }
+
+  /** Points the profile at an image row (or none). The caller handles the old file. */
+  setAvatar(id: number, imageId: number | null): UserRow {
+    this.setAvatarStmt.run({ id, image_id: imageId });
+    const row = this.findById(id);
+    if (!row) throw new HttpError(404, "user_not_found");
+    this.events.emit("user.updated", { user: toPublicUser(row) });
+    return row;
+  }
+
   delete(id: number): DeleteUserResult {
     const row = this.findById(id);
     if (!row) throw new HttpError(404, "user_not_found");
@@ -173,11 +202,14 @@ export class UsersService {
 
     const count = (sql: string) => (this.db.prepare(sql).get({ id }) as { n: number }).n;
     const affectedSlots = this.slots.listByUser(id);
+    const uploaded = this.db
+      .prepare("SELECT * FROM images WHERE uploader_id = :id")
+      .all({ id }) as unknown as Image[];
     const cascaded = withTransaction(this.db, () => {
       const c = {
         sessions: count("SELECT COUNT(*) AS n FROM sessions WHERE user_id = :id"),
         slots: affectedSlots.length,
-        images: count("SELECT COUNT(*) AS n FROM images WHERE uploader_id = :id"),
+        images: uploaded.length,
       };
       // FK cascades remove sessions, slots, slot_printers, and image rows.
       this.deleteStmt.run({ id });
@@ -186,6 +218,7 @@ export class UsersService {
     // Each cascaded slot goes through the same cleanup/event path as a manual delete (§3.1).
     for (const slot of affectedSlots) this.slots.notifyCascaded(slot, "user_deleted");
     const user = toPublicUser(row);
+    for (const hook of this.onDeleteHooks) hook({ user, images: uploaded });
     this.events.emit("user.deleted", { user });
     return { user, cascaded };
   }

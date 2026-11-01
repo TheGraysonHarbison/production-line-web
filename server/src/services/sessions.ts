@@ -43,8 +43,10 @@ export class SessionsService {
     );
     this.select = db.prepare(
       `SELECT s.id AS session_id, s.user_id, s.created_at AS session_created_at, s.expires_at,
-              u.id, u.username, u.password_hash, u.color, u.role, u.time_format, u.avatar_image_id, u.created_at
-       FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = :id`,
+              u.id, u.username, u.password_hash, u.color, u.role, u.time_format, u.avatar_image_id, u.created_at,
+              i.stored_name AS avatar_stored_name
+       FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN images i ON i.id = u.avatar_image_id
+       WHERE s.id = :id`,
     );
     this.touch = db.prepare("UPDATE sessions SET expires_at = :expires_at WHERE id = :id");
     this.remove = db.prepare("DELETE FROM sessions WHERE id = :id");
@@ -92,6 +94,7 @@ export class SessionsService {
       role: joined.role,
       time_format: joined.time_format,
       avatar_image_id: joined.avatar_image_id,
+      avatar_stored_name: joined.avatar_stored_name,
       created_at: joined.created_at,
     };
     return { session, user };

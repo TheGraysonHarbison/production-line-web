@@ -20,6 +20,7 @@ export const usersQueryKey = ["users"] as const;
 export const slotsQueryKey = {
   all: ["slots"] as const,
   range: (from: string, to: string) => ["slots", from, to] as const,
+  one: (id: number) => ["slot", id] as const,
 };
 
 /** Slots overlapping [from, to) as ISO instants. Patched live by the event stream. */
@@ -30,6 +31,15 @@ export function useSlotsRange(from: string, to: string) {
       api<Slot[]>(`/api/slots?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     // The timeline strip grows when you step into the past; keep cards up while it refetches.
     placeholderData: keepPreviousData,
+  });
+}
+
+/** One slot by id, kept fresh by the event stream; the editor's image list reads from here. */
+export function useSlot(id: number | undefined) {
+  return useQuery({
+    queryKey: slotsQueryKey.one(id ?? 0),
+    queryFn: () => api<Slot>(`/api/slots/${id}`),
+    enabled: id !== undefined,
   });
 }
 

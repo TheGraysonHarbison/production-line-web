@@ -21,6 +21,10 @@ npm start        # serve the production build on :8080
 
 See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for details.
 
+## Images
+
+An admin can turn on image uploads under **Settings → General**. Slots then accept photos (PNG, JPEG, TIFF, WEBP, and camera RAW: DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2) up to 10 MB each, and everyone can set a profile image. Files are checked by their actual bytes, stored under `DATA_DIR/images/`, and deleted with the slot. Browsers can't display TIFF or RAW, so those appear as a file card with a download link.
+
 ## Home Assistant
 
 When a slot's end time passes, the server deletes it and fires a native Home Assistant event, `production_line_slot_expired`, carrying the slot, its owner, and its printers. Automations trigger on it by `event_type`.

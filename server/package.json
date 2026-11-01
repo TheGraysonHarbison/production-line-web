@@ -13,11 +13,13 @@
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
     "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.6",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "10.1.8",
     "@production-line/shared": "*",
     "fastify": "5.12.7",
     "fastify-plugin": "^6.0.1",
+    "file-type": "^22.3.0",
     "pino": "10.4.0",
     "temporal-polyfill": "^1.0.6",
     "zod": "^4.6.7"

@@ -16,7 +16,7 @@ import { withTransaction } from "../db/connection.js";
 import { HttpError } from "../errors.js";
 import type { AppEvents } from "../events.js";
 import { toPrinter } from "./printers.js";
-import { toPublicUser, type UserRow } from "./users.js";
+import { toPublicUser, USER_SELECT, type UserRow } from "./users.js";
 
 export type DeleteReason = "manual" | "expired" | "user_deleted";
 
@@ -107,7 +107,7 @@ export class SlotsService {
     this.imagesFor = db.prepare(
       "SELECT * FROM images WHERE slot_id IN (SELECT value FROM json_each(:ids)) ORDER BY created_at, id",
     );
-    this.userById = db.prepare("SELECT * FROM users WHERE id = :id");
+    this.userById = db.prepare(`${USER_SELECT} WHERE u.id = :id`);
   }
 
   /** Later phases register cleanup (image files) that must run when a slot goes away. */
