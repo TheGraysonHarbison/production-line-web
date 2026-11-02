@@ -4,9 +4,13 @@ All notable changes to Production Line Web. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [1.0.0] – 2026-11-02
+
+The first stable release: everything from the release candidates below, plus:
+
 ### Added
-- Documentation for hobbyist installs: screenshots, reverse-proxy note, troubleshooting, a Home Assistant guide, and this changelog.
-- The Playwright suite also runs against the built container image in CI.
+- Documentation for hobbyist installs: screenshots, "how it works", upgrade notes, a reverse-proxy and HTTPS note, troubleshooting, a Home Assistant guide, and this changelog.
+- The full Playwright suite runs in CI against the built container image and, on a release, against the pushed image.
 
 ## [1.0.0-rc.2] – 2026-11-02
 
@@ -30,6 +34,7 @@ First release candidate (tagged, but its image push was refused; see rc.2). Ever
 - **Hardening.** Helmet with a strict CSP, CSRF origin checks, rate limits, scrypt passwords, encrypted HA token, route-coverage test, SQL interpolation lint gate, a security review document.
 - **Packaging.** Multi-arch container image (amd64, arm64) on GHCR, Docker Compose and Podman Quadlet installers, a standalone installer with a hardened systemd unit and a release tarball, uninstallers, an upgrade test in CI.
 
-[Unreleased]: https://github.com/TheGraysonHarbison/production-line-web/compare/v1.0.0-rc.2...HEAD
+[Unreleased]: https://github.com/TheGraysonHarbison/production-line-web/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/TheGraysonHarbison/production-line-web/releases/tag/v1.0.0
 [1.0.0-rc.2]: https://github.com/TheGraysonHarbison/production-line-web/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/TheGraysonHarbison/production-line-web/releases/tag/v1.0.0-rc.1

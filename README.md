@@ -8,7 +8,7 @@ Made for a household or small workshop that shares a few printers: everyone gets
 |---|---|---|
 | ![Desktop timeline](docs/screenshots/desktop-timeline.png) | ![Month calendar](docs/screenshots/desktop-calendar.png) | ![Phone timeline](docs/screenshots/phone-timeline.png) |
 
-**Status:** release candidate. See [CHANGELOG.md](CHANGELOG.md), [docs/ROADMAP.md](docs/ROADMAP.md) for the build plan, and [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md) for the full specification.
+**Status:** v1.0.0. See [CHANGELOG.md](CHANGELOG.md), [docs/ROADMAP.md](docs/ROADMAP.md) for the build plan, and [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md) for the full specification.
 
 ## How it works
 
@@ -51,7 +51,7 @@ Needs Node 26 or newer on the `PATH` (see <https://nodejs.org/en/download>); the
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/TheGraysonHarbison/production-line-web/main/scripts/install-standalone.sh
 sudo bash install-standalone.sh                      # latest release
-sudo bash install-standalone.sh --version v1.0.0-rc.2
+sudo bash install-standalone.sh --version v1.0.0
 sudo bash install-standalone.sh --from-source        # from inside a git checkout
 ```
 
