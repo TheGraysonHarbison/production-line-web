@@ -27,6 +27,8 @@ jobs:
       - run: npm run e2e
         env:
           CI: "1"
+      - name: Release tarball builds
+        run: npm run release -- --no-build
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -70,5 +72,18 @@ jobs:
           echo "server did not become healthy"; docker logs plw; exit 1
       - name: Upgrade test from the last published image (skipped until one exists)
         run: scripts/upgrade-test.sh ghcr.io/goblinfoddergames/production-line-web:latest production-line-web:ci
-      - name: Release tarball builds
-        run: npm run release -- --no-build
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Full e2e suite against the built container
+        run: scripts/e2e-container.sh production-line-web:ci
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-container
+          path: e2e/playwright-report
+          retention-days: 7

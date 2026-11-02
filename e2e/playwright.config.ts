@@ -5,6 +5,9 @@ import { defineConfig, devices } from "@playwright/test";
 
 // Override when something else holds 8080 on the dev host (same spirit as PLW_E2E_DATA_DIR).
 const PORT = Number(process.env.PLW_E2E_PORT ?? 8080);
+// Set to run against a server someone else started (CI runs the suite against the built container,
+// started with a fresh volume and the rate-limit overrides below); no web server is launched.
+const EXTERNAL = process.env.PLW_E2E_EXTERNAL === "1";
 // Every e2e run starts from a fresh, empty DATA_DIR so the first-boot flow is testable.
 const DATA_DIR = process.env.PLW_E2E_DATA_DIR ?? mkdtempSync(join(tmpdir(), "plw-e2e-"));
 
@@ -41,21 +44,25 @@ export default defineConfig({
       fullyParallel: false,
     },
   ],
-  webServer: {
-    command: "npm run start",
-    cwd: "..",
-    url: `http://localhost:${PORT}/api/meta`,
-    reuseExistingServer: false,
-    timeout: 30_000,
-    // All browser contexts share one IP, so the per-IP backstop must not throttle the suite.
-    env: {
-      DATA_DIR,
-      PORT: String(PORT),
-      LOG_LEVEL: "warn",
-      RATE_LIMIT_MAX: "100000",
-      RATE_LIMIT_AUTH_MAX: "100000",
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+  ...(EXTERNAL
+    ? {}
+    : {
+        webServer: {
+          command: "npm run start",
+          cwd: "..",
+          url: `http://localhost:${PORT}/api/meta`,
+          reuseExistingServer: false,
+          timeout: 30_000,
+          // All browser contexts share one IP, so the per-IP backstop must not throttle the suite.
+          env: {
+            DATA_DIR,
+            PORT: String(PORT),
+            LOG_LEVEL: "warn",
+            RATE_LIMIT_MAX: "100000",
+            RATE_LIMIT_AUTH_MAX: "100000",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      }),
 });

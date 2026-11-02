@@ -8,7 +8,40 @@
 
 ## Setup
 
-Requires Node 26. Install dependencies with `npm ci`. Run `npm run dev` for the client (`:5173`) and server (`:8080`) in watch mode. The shared package is rebuilt in watch mode too.
+Requires Node 26 (`.node-version`). Install dependencies with `npm ci`. Run `npm run dev` for the client (`:5173`, proxying `/api`) and server (`:8080`) in watch mode; the shared package is rebuilt in watch mode too.
+
+On Bazzite (immutable Fedora) there are two supported setups, both described in dev doc §14:
+
+- **Host tools via Homebrew.** `scripts/dev-setup-bazzite.sh` installs fnm, pins Node 26 for the checkout, runs `npm ci`, and installs the Playwright Chromium build. Add `eval "$(fnm env --use-on-cd)"` to your shell profile.
+- **Distrobox.** Create a Debian or Fedora toolbox, install Node 26 inside it (a tarball from nodejs.org under `~/.local` works well since the home directory is shared), and run everything from there. Podman stays on the host; `distrobox-host-exec podman …` builds and runs the image, and anything that needs the host's `podman` from inside the box can use a tiny `podman` shim that execs `distrobox-host-exec podman "$@"`.
+
+### Scripts
+
+| Script | What it does |
+|---|---|
+| `npm run dev` | shared (watch) + server (tsx watch) + client (vite) |
+| `npm run build` | shared → client → copy into `server/public` → server |
+| `npm start` | serve the production build from `server/dist` |
+| `npm test` | Vitest: shared, server (Fastify `inject()` + temp SQLite), client (jsdom) |
+| `npm run e2e` | Playwright against a fresh server; `PLW_E2E_PORT` to move it, `PLW_E2E_EXTERNAL=1` to target a server you started |
+| `npm run lint` / `lint:fix` | Biome plus the SQL interpolation gate |
+| `npm run typecheck` | `tsc --noEmit` for server and client |
+| `npm run release` | the standalone tarball (see Releases) |
+| `npm run db:migrate` | apply pending migrations to `$DATA_DIR` (built tree) |
+| `scripts/e2e-container.sh IMAGE` | the full Playwright suite against a container of that image |
+| `scripts/upgrade-test.sh OLD NEW` | data survives an image upgrade |
+| `scripts/perf-seed.mjs` | 10 printers × 500 slots for timing |
+
+### Test layers
+
+| Layer | Where | Runs |
+|---|---|---|
+| Unit | `packages/shared/src/*.test.ts`, `client/src/**/*.test.ts`, pure server helpers | `npm test` |
+| Integration | `server/test/*.test.ts`: every route's auth matrix, conflicts, cascades, expiry with fake timers, HA against a mock, images, backup, hardening, observability | `npm test` |
+| End-to-end | `e2e/*.spec.ts`: setup → viewport projects (desktop 1280×800, tablet 768×1024, phone 390×844) → serial admin project | `npm run e2e`; CI also runs it against the built container and, on a release, the pushed image |
+| Build | `.github/workflows/ci.yml`: lint, tests, build, e2e, multi-arch image, smoke, upgrade test, container e2e, tarball | every push and PR |
+
+Conventional commit prefixes: `feat`, `fix`, `docs`, `test`, `chore`, `ci`, `refactor`, `perf`; scope in parentheses when it helps (`feat(client): …`).
 
 ## Layout
 

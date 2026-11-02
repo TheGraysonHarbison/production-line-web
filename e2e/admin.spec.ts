@@ -123,7 +123,11 @@ test("admin tests Home Assistant delivery against a mock instance", async ({ pag
       res.end('{"message":"Event production_line_test fired."}');
     });
   });
-  await new Promise<void>((r) => ha.listen(0, "127.0.0.1", r));
+  // Against a containerised server (scripts/e2e-container.sh) the mock must listen on all
+  // interfaces and be addressed by the host's name as seen from inside the container.
+  const bind = process.env.PLW_E2E_HA_BIND ?? "127.0.0.1";
+  const host = process.env.PLW_E2E_HA_HOST ?? "127.0.0.1";
+  await new Promise<void>((r) => ha.listen(0, bind, r));
   const port = (ha.address() as { port: number }).port;
 
   try {
@@ -132,7 +136,7 @@ test("admin tests Home Assistant delivery against a mock instance", async ({ pag
     // Nothing saved yet: Test is disabled with a hint.
     const testButton = page.getByRole("button", { name: "Test" });
     await expect(testButton).toBeDisabled();
-    await page.getByLabel("Base URL").fill(`http://127.0.0.1:${port}`);
+    await page.getByLabel("Base URL").fill(`http://${host}:${port}`);
     await page.getByLabel("Long-lived access token").fill("llat-e2e-token");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByRole("status")).toHaveText(/saved/i);

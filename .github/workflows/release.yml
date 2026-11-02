@@ -89,6 +89,16 @@ jobs:
           echo "server did not become healthy"; docker logs plw; exit 1
       - name: Upgrade test from the previous release
         run: scripts/upgrade-test.sh "${IMAGE}:latest" "${IMAGE}:${{ steps.ver.outputs.version }}"
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Full e2e suite against the pushed image
+        run: scripts/e2e-container.sh "${IMAGE}:${{ steps.ver.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-release
+          path: e2e/playwright-report
+          retention-days: 7
 
       - name: GitHub release with the tarball
         env:
