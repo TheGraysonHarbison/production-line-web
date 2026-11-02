@@ -54,7 +54,7 @@ export function SlotCard({
   return (
     <button
       type="button"
-      className={`absolute overflow-hidden rounded-lg border px-2 py-1 text-left text-ink text-xs leading-tight shadow-sm backdrop-blur-sm ${
+      className={`absolute overflow-hidden rounded-lg border px-2 py-1 text-left text-ink text-xs leading-tight shadow-sm ${
         vertical ? "inset-x-1" : "inset-y-1"
       } ${running ? "ring-2 ring-accent/60" : ""} ${movable ? "cursor-grab" : ""} ${
         dragging ? "cursor-grabbing opacity-80 shadow-lg" : ""
@@ -67,6 +67,10 @@ export function SlotCard({
         [vertical ? "borderTopColor" : "borderLeftColor"]: slot.user.color,
         // Touch keeps scrolling; mouse/pen drags move the slot.
         touchAction: movable ? "pan-x pan-y" : undefined,
+        // Thousands of cards can sit in a 30-day strip; off-screen ones are not painted. No
+        // per-card backdrop blur either: the lane surface is already glass, and blurring every
+        // card made the compositor repaint them all on each scroll frame.
+        contentVisibility: "auto",
       }}
       onClick={onClick}
       onPointerDown={(e) => {

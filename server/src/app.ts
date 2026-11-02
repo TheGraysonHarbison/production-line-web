@@ -7,11 +7,13 @@ import { IMAGE_MAX_BYTES } from "@production-line/shared";
 import Fastify from "fastify";
 import fp from "fastify-plugin";
 import type { AppContext } from "./context.js";
+import { closeDatabase } from "./db/connection.js";
 import { errorHandler } from "./errors.js";
 import authPlugin from "./plugins/auth.js";
 import securityPlugin from "./plugins/security.js";
 import setupRedirectPlugin from "./plugins/setup-redirect.js";
 import { authRoutes } from "./routes/auth.js";
+import { backupRoutes } from "./routes/backup.js";
 import { imagesRoutes } from "./routes/images.js";
 import { meRoutes } from "./routes/me.js";
 import { metaRoutes } from "./routes/meta.js";
@@ -31,10 +33,18 @@ declare module "fastify" {
 /** The concrete app type (Fastify instance with our pino logger). */
 export type App = Awaited<ReturnType<typeof buildApp>>;
 
+export interface RegisteredRoute {
+  method: string;
+  url: string;
+  preHandler: unknown[];
+}
+
 export interface BuildAppOptions {
   ctx: AppContext;
   /** Directory holding the built SPA. Defaults to `server/public`. */
   publicDir?: string;
+  /** Test hook: sees every route as it is registered (the route-coverage audit uses it). */
+  onRoute?: (route: RegisteredRoute) => void;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -61,12 +71,23 @@ export async function buildApp(options: BuildAppOptions) {
         instance.addHook("onClose", async () => {
           await ctx.expiry.stop();
           ctx.broadcaster.stop();
-          ctx.db.close();
+          closeDatabase(ctx.db);
         });
       },
       { name: "context" },
     ),
   );
+
+  if (options.onRoute) {
+    const report = options.onRoute;
+    app.addHook("onRoute", (route) => {
+      const pre = route.preHandler;
+      const list = pre === undefined ? [] : Array.isArray(pre) ? pre : [pre];
+      for (const method of Array.isArray(route.method) ? route.method : [route.method]) {
+        report({ method, url: route.url, preHandler: list });
+      }
+    });
+  }
 
   app.setErrorHandler(errorHandler);
   await app.register(securityPlugin);
@@ -90,6 +111,7 @@ export async function buildApp(options: BuildAppOptions) {
       await api.register(settingsRoutes);
       await api.register(slotsRoutes);
       await api.register(imagesRoutes);
+      await api.register(backupRoutes);
       await api.register(streamRoutes);
     },
     { prefix: "/api" },

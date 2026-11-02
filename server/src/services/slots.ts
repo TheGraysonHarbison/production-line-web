@@ -107,6 +107,7 @@ export class SlotsService {
     this.imagesFor = db.prepare(
       "SELECT * FROM images WHERE slot_id IN (SELECT value FROM json_each(:ids)) ORDER BY created_at, id",
     );
+    // sql: USER_SELECT is a module constant (the avatar join), not data.
     this.userById = db.prepare(`${USER_SELECT} WHERE u.id = :id`);
   }
 

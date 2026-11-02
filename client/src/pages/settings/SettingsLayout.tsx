@@ -9,6 +9,7 @@ const TABS: { to: string; label: string; role: Role }[] = [
   { to: "/settings/printers", label: "Printers", role: "admin" },
   { to: "/settings/general", label: "General", role: "admin" },
   { to: "/settings/home-assistant", label: "Home Assistant", role: "admin" },
+  { to: "/settings/backup", label: "Backup", role: "admin" },
   { to: "/settings/users", label: "Users", role: "owner" },
 ];
 

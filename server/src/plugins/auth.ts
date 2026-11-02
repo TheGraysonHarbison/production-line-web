@@ -77,10 +77,12 @@ export async function requireAuth(request: FastifyRequest): Promise<void> {
 
 /** preHandler factory: 401 without a session, 403 below the required role. Owner satisfies admin. */
 export function requireRole(role: Role) {
-  return async (request: FastifyRequest): Promise<void> => {
+  const guard = async (request: FastifyRequest): Promise<void> => {
     if (!request.user) throw unauthorized();
     if (!roleSatisfies(request.user.role, role)) throw forbidden("insufficient_role");
   };
+  // Named so the route-coverage audit can tell guards from other preHandlers.
+  return Object.defineProperty(guard, "name", { value: `requireRole:${role}` });
 }
 
 const SlotParams = z.object({ id: z.coerce.number().pipe(IdSchema) });
@@ -90,7 +92,7 @@ const SlotParams = z.object({ id: z.coerce.number().pipe(IdSchema) });
  * Owner may proceed; everyone else gets 403. Loads the slot onto `request.slot` (404 if missing).
  */
 export function requireSlotAccess() {
-  return async (request: FastifyRequest): Promise<void> => {
+  const guard = async (request: FastifyRequest): Promise<void> => {
     if (!request.user) throw unauthorized();
     const { id } = SlotParams.parse(request.params);
     const slot = request.server.ctx.slots.get(id);
@@ -99,4 +101,5 @@ export function requireSlotAccess() {
       throw forbidden("not_slot_owner", "only the slot's owner or an admin may change it");
     request.slot = slot;
   };
+  return Object.defineProperty(guard, "name", { value: "requireSlotAccess" });
 }

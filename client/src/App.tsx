@@ -8,6 +8,7 @@ import { ProfilePage } from "./pages/ProfilePage.tsx";
 import { RegisterPage } from "./pages/RegisterPage.tsx";
 import { SetupPage } from "./pages/SetupPage.tsx";
 import { Shell } from "./pages/Shell.tsx";
+import { BackupPage } from "./pages/settings/BackupPage.tsx";
 import { GeneralPage } from "./pages/settings/GeneralPage.tsx";
 import { HomeAssistantPage } from "./pages/settings/HomeAssistantPage.tsx";
 import { PrintersPage } from "./pages/settings/PrintersPage.tsx";
@@ -57,6 +58,7 @@ export function App() {
           <Route path="printers" element={<PrintersPage />} />
           <Route path="general" element={<GeneralPage />} />
           <Route path="home-assistant" element={<HomeAssistantPage />} />
+          <Route path="backup" element={<BackupPage />} />
           <Route path="users" element={<UsersPage />} />
         </Route>
       </Route>

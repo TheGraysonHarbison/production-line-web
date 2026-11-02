@@ -87,6 +87,7 @@ export class PrintersService {
     }
     if (sets.length > 0) {
       try {
+        // sql: `sets` holds fixed "column = :param" fragments; values travel as parameters.
         this.db.prepare(`UPDATE printers SET ${sets.join(", ")} WHERE id = :id`).run(params);
       } catch (err) {
         throw this.mapUnique(err);

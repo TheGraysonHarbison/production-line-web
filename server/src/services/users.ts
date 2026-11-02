@@ -85,9 +85,12 @@ export class UsersService {
     private readonly events: AppEvents,
     private readonly slots: SlotsService,
   ) {
+    // sql: USER_SELECT is a module constant (the avatar join), not data.
     this.byId = db.prepare(`${USER_SELECT} WHERE u.id = :id`);
+    // sql: USER_SELECT constant
     this.byUsername = db.prepare(`${USER_SELECT} WHERE u.username = :username COLLATE NOCASE`);
     this.countStmt = db.prepare("SELECT COUNT(*) AS n FROM users");
+    // sql: USER_SELECT constant
     this.listStmt = db.prepare(`${USER_SELECT} ORDER BY u.username COLLATE NOCASE`);
     this.insert = db.prepare(
       `INSERT INTO users (username, password_hash, color, role, created_at)
@@ -138,6 +141,7 @@ export class UsersService {
       }
     }
     if (sets.length > 0) {
+      // sql: `sets` is built from the three whitelisted column names above; values are parameters.
       this.db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = :id`).run(params);
     }
     const row = this.findById(id);

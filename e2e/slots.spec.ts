@@ -72,6 +72,22 @@ async function trackBox(track: ReturnType<Page["getByTestId"]>) {
   return (await track.boundingBox()) as { x: number; y: number; width: number; height: number };
 }
 
+/**
+ * A mouse drag along a lane. The suite runs in parallel against one server, and a printer
+ * another test creates arrives live and can insert a lane above this one mid-drag, so the
+ * vertical centre is re-read from the lane right before every pointer step.
+ */
+async function dragAlong(page: Page, track: ReturnType<Page["getByTestId"]>, xs: number[]) {
+  const y = async () => {
+    const b = await trackBox(track);
+    return b.y + b.height / 2;
+  };
+  await page.mouse.move(xs[0] as number, await y());
+  await page.mouse.down();
+  for (const x of xs.slice(1)) await page.mouse.move(x, await y(), { steps: 4 });
+  await page.mouse.up();
+}
+
 test.describe("desktop scheduling", () => {
   test.skip(
     ({ isMobile, viewport }) => isMobile || (viewport?.width ?? 0) < 1024,
@@ -84,8 +100,8 @@ test.describe("desktop scheduling", () => {
     baseURL,
   }) => {
     await signInAsOwner(page);
-    const printer = await addPrinter(page, `Drag-${suffix()}`, baseURL as string);
-    const other = await addPrinter(page, `Other-${suffix()}`, baseURL as string);
+    const printer = await addPrinter(page, `Aa-drag-${suffix()}`, baseURL as string);
+    const other = await addPrinter(page, `Ab-other-${suffix()}`, baseURL as string);
     const { date } = await tomorrowWindow(page);
 
     // A second browser watches the same day.
@@ -123,14 +139,13 @@ test.describe("desktop scheduling", () => {
       return trackBox(track);
     };
     let box = await measure();
-    const y = box.y + box.height / 2;
 
     // Drag 06:00 → 08:00 on the printer's lane (morning hours fit inside the 1280px viewport).
-    await page.mouse.move(await xFor(page, box, date, "6 AM"), y);
-    await page.mouse.down();
-    await page.mouse.move(await xFor(page, box, date, "7 AM"), y, { steps: 4 });
-    await page.mouse.move(await xFor(page, box, date, "8 AM"), y, { steps: 4 });
-    await page.mouse.up();
+    await dragAlong(page, track, [
+      await xFor(page, box, date, "6 AM"),
+      await xFor(page, box, date, "7 AM"),
+      await xFor(page, box, date, "8 AM"),
+    ]);
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -228,11 +243,11 @@ test.describe("desktop scheduling", () => {
       width: number;
       height: number;
     };
-    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(await xFor(page, box, date, "8 AM", 15), y, { steps: 5 });
-    await page.mouse.move(await xFor(page, box, date, "8 AM", 30), y, { steps: 5 });
-    await page.mouse.up();
+    await dragAlong(page, track, [
+      handleBox.x + handleBox.width / 2,
+      await xFor(page, box, date, "8 AM", 15),
+      await xFor(page, box, date, "8 AM", 30),
+    ]);
     await page
       .getByTestId("slot-card")
       .filter({ hasText: `${slotName}-v2` })
@@ -251,11 +266,11 @@ test.describe("desktop scheduling", () => {
       width: number;
       height: number;
     };
-    await page.mouse.move(sh.x + sh.width / 2, sh.y + sh.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(await xFor(page, box, date, "5 AM", 45), y, { steps: 5 });
-    await page.mouse.move(await xFor(page, box, date, "5 AM", 30), y, { steps: 5 });
-    await page.mouse.up();
+    await dragAlong(page, track, [
+      sh.x + sh.width / 2,
+      await xFor(page, box, date, "5 AM", 45),
+      await xFor(page, box, date, "5 AM", 30),
+    ]);
     const ourCard = page
       .getByTestId("slot-card")
       .filter({ hasText: `${slotName}-v2` })
@@ -277,11 +292,7 @@ test.describe("desktop scheduling", () => {
       height: number;
     };
     const grabX = cb.x + cb.width / 2;
-    await page.mouse.move(grabX, cb.y + cb.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(grabX - 15 * PX_PER_MINUTE, y, { steps: 5 });
-    await page.mouse.move(grabX - 30 * PX_PER_MINUTE, y, { steps: 5 });
-    await page.mouse.up();
+    await dragAlong(page, track, [grabX, grabX - 15 * PX_PER_MINUTE, grabX - 30 * PX_PER_MINUTE]);
     await expect.poll(async () => (await ourCard.getAttribute("title")) ?? "").toMatch(/5:00 AM/);
     await ourCard.click();
     await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
@@ -413,13 +424,12 @@ test.describe("desktop scheduling", () => {
     const nowLeft = await lane
       .getByTestId("now-line")
       .evaluate((el) => Number.parseFloat((el as HTMLElement).style.left));
-    const y = box.y + box.height / 2;
     const before = Date.now();
-    await page.mouse.move(box.x + nowLeft + 90 * PX_PER_MINUTE, y);
-    await page.mouse.down();
-    await page.mouse.move(box.x + nowLeft - 30 * PX_PER_MINUTE, y, { steps: 5 });
-    await page.mouse.move(box.x + nowLeft - 90 * PX_PER_MINUTE, y, { steps: 5 });
-    await page.mouse.up();
+    await dragAlong(page, track, [
+      box.x + nowLeft + 90 * PX_PER_MINUTE,
+      box.x + nowLeft - 30 * PX_PER_MINUTE,
+      box.x + nowLeft - 90 * PX_PER_MINUTE,
+    ]);
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "New slot" })).toBeVisible();
     const slotName = `Clamped-${suffix()}`;
@@ -443,7 +453,8 @@ test.describe("desktop scheduling", () => {
 
     // Pressing in the hatched past does nothing. (Now leaves 30 minutes of past on screen; further
     // left is the pinned printer label.)
-    await page.mouse.click(box.x + nowLeft - 20 * PX_PER_MINUTE, y);
+    const b2 = await trackBox(track);
+    await page.mouse.click(box.x + nowLeft - 20 * PX_PER_MINUTE, b2.y + b2.height / 2);
     await page.waitForTimeout(300);
     await expect(dialog).toBeHidden();
   });
