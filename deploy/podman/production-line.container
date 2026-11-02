@@ -1,0 +1,26 @@
+# Production Line Web — Podman Quadlet unit (dev doc §15.2).
+# scripts/install-podman.sh copies this to ~/.config/containers/systemd/ and starts it as a
+# rootless user service. `podman auto-update` (or its timer) pulls new images because of
+# AutoUpdate=registry; see §15.4.
+#
+# TZ is the container's OS timezone (logs); the app's timezone is set in Settings → General.
+# /data inside the container (DATA_DIR) holds the database, secret key, and images.
+[Unit]
+Description=Production Line Web
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=ghcr.io/goblinfoddergames/production-line-web:latest
+ContainerName=production-line
+PublishPort=8080:8080
+Volume=plw-data:/data
+Environment=TZ=America/New_York
+AutoUpdate=registry
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

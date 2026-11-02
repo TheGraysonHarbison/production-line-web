@@ -1,0 +1,19 @@
+# Production Line Web — Docker Compose (dev doc §15.1).
+# scripts/install-docker.sh writes a copy of this file to ~/production-line-web/ and starts it.
+#
+# TZ is the operating-system timezone for the container (log timestamps and the like); the app's
+# own timezone is chosen in Settings → General. DATA_DIR inside the image is /data: the SQLite
+# database, the secret key, and uploaded images all live on the plw-data volume.
+services:
+  production-line:
+    image: ghcr.io/goblinfoddergames/production-line-web:latest
+    container_name: production-line
+    ports:
+      - "8080:8080"
+    volumes:
+      - plw-data:/data
+    environment:
+      TZ: "America/New_York"
+    restart: unless-stopped
+volumes:
+  plw-data:

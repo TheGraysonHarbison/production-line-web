@@ -64,7 +64,11 @@ jobs:
         run: |
           docker run -d --name plw -p 8080:8080 production-line-web:ci
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/api/meta; then echo; exit 0; fi
+            if curl -fsS http://127.0.0.1:8080/api/meta; then echo; docker rm -f plw; exit 0; fi
             sleep 1
           done
           echo "server did not become healthy"; docker logs plw; exit 1
+      - name: Upgrade test from the last published image (skipped until one exists)
+        run: scripts/upgrade-test.sh ghcr.io/goblinfoddergames/production-line-web:latest production-line-web:ci
+      - name: Release tarball builds
+        run: npm run release -- --no-build

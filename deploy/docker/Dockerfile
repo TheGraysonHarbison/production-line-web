@@ -22,6 +22,14 @@ RUN npm ci --omit=dev --workspace=packages/shared --workspace=server \
  && npm cache clean --force
 
 FROM node:26-bookworm-slim
+ARG VERSION=0.0.0
+LABEL org.opencontainers.image.title="Production Line Web" \
+      org.opencontainers.image.description="Self-hosted, LAN-only scheduling for shared 3D printers" \
+      org.opencontainers.image.version="$VERSION" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/TheGraysonHarbison/production-line-web"
+# TZ is left unset (UTC) for log timestamps; set it in compose.yaml / the Quadlet unit. The app's
+# own timezone is chosen in Settings → General. DATA_DIR is the /data volume.
 ENV NODE_ENV=production \
     PORT=8080 \
     HOST=0.0.0.0 \

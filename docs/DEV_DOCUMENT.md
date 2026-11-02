@@ -545,7 +545,7 @@ volumes:
 
 ### 15.2 Podman (Quadlet)
 
-Rootless Podman with systemd user units. `scripts/install-podman.sh` copies the Quadlet file to `~/.config/containers/systemd/`, runs `systemctl --user daemon-reload`, `systemctl --user enable --now production-line`, and runs `loginctl enable-linger $USER` so it starts at boot.
+Rootless Podman with systemd user units. `scripts/install-podman.sh` copies the Quadlet file to `~/.config/containers/systemd/`, runs `systemctl --user daemon-reload`, `systemctl --user start production-line` (Quadlet-generated units cannot be `enable`d; the generator honours the `[Install]` section instead), and runs `loginctl enable-linger $USER` so it starts at boot. `scripts/uninstall-podman.sh` removes the unit and, with `--purge`, the `plw-data` volume.
 
 ```ini
 # deploy/podman/production-line.container
