@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
+import { IMAGE_MAX_BYTES } from "@production-line/shared";
 import Fastify from "fastify";
 import fp from "fastify-plugin";
 import type { AppContext } from "./context.js";
@@ -10,6 +12,7 @@ import authPlugin from "./plugins/auth.js";
 import securityPlugin from "./plugins/security.js";
 import setupRedirectPlugin from "./plugins/setup-redirect.js";
 import { authRoutes } from "./routes/auth.js";
+import { imagesRoutes } from "./routes/images.js";
 import { meRoutes } from "./routes/me.js";
 import { metaRoutes } from "./routes/meta.js";
 import { printersRoutes } from "./routes/printers.js";
@@ -69,6 +72,12 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(securityPlugin);
   await app.register(authPlugin);
   await app.register(setupRedirectPlugin);
+  // Uploads (§9.7): one file per request, capped at the multipart layer so nothing past 10 MB is
+  // buffered; the parser errors the stream and the route answers 413.
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: IMAGE_MAX_BYTES, files: 1, fields: 4, parts: 5 },
+    throwFileSizeLimit: true,
+  });
 
   await app.register(
     async (api) => {
@@ -80,6 +89,7 @@ export async function buildApp(options: BuildAppOptions) {
       await api.register(printersRoutes);
       await api.register(settingsRoutes);
       await api.register(slotsRoutes);
+      await api.register(imagesRoutes);
       await api.register(streamRoutes);
     },
     { prefix: "/api" },

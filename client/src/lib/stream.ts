@@ -64,15 +64,21 @@ export function applyStreamEvent(
 ) {
   switch (name) {
     case "slot.created":
-    case "slot.updated":
-      upsertSlot(qc, (data as { slot: Slot }).slot);
+    case "slot.updated": {
+      const slot = (data as { slot: Slot }).slot;
+      upsertSlot(qc, slot);
+      if (qc.getQueryData(slotsQueryKey.one(slot.id)))
+        qc.setQueryData(slotsQueryKey.one(slot.id), slot);
       break;
+    }
     case "slot.deleted":
       removeSlot(qc, (data as { slot: Slot }).slot.id);
+      qc.removeQueries({ queryKey: slotsQueryKey.one((data as { slot: Slot }).slot.id) });
       break;
     case "slot.expired": {
       const slot = (data as { slot: Slot }).slot;
       removeSlot(qc, slot.id);
+      qc.removeQueries({ queryKey: slotsQueryKey.one(slot.id) });
       // Dev doc §3.4 / roadmap Phase 8: the owner, if online, gets a small note.
       if (slot.user.id === meId) {
         const names = slot.printers.map((p) => p.name).join(", ");

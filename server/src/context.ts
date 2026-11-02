@@ -8,6 +8,7 @@ import { AppEvents } from "./events.js";
 import { Broadcaster } from "./services/broadcaster.js";
 import { ExpiryScheduler } from "./services/expiry.js";
 import { HaClient } from "./services/ha.js";
+import { ImagesService } from "./services/images.js";
 import { PrintersService } from "./services/printers.js";
 import { SessionsService } from "./services/sessions.js";
 import { SettingsService } from "./services/settings.js";
@@ -25,6 +26,7 @@ export interface AppContext {
   sessions: SessionsService;
   printers: PrintersService;
   slots: SlotsService;
+  images: ImagesService;
   broadcaster: Broadcaster;
   ha: HaClient;
   /** Started by `index.ts` after the app is built; tests drive it by hand. */
@@ -57,6 +59,10 @@ export function createContext(config: Config, log: Logger): AppContext {
   const printers = new PrintersService(db, events);
   const slots = new SlotsService(db, events);
   const users = new UsersService(db, events, slots);
+  const images = new ImagesService(db, dataDir.imagesDir, log);
+  // Image files follow their rows on every deletion path (§3.8): manual, expiry, user cascade.
+  slots.onDelete((slot) => void images.removeFiles(slot.images));
+  users.onDelete(({ images: rows }) => void images.removeFiles(rows));
   const sessions = new SessionsService(db);
   const purged = sessions.purgeExpired();
   if (purged > 0) log.info({ purged }, "sessions.purged");
@@ -85,6 +91,7 @@ export function createContext(config: Config, log: Logger): AppContext {
     sessions,
     printers,
     slots,
+    images,
     broadcaster,
     ha,
     expiry,

@@ -2,6 +2,7 @@ import type { Slot } from "@production-line/shared";
 import { type MouseEvent, type PointerEvent as ReactPointerEvent, useRef } from "react";
 import { useTimeFormat, useTimeZone } from "../lib/prefs.ts";
 import { formatRange } from "../lib/time.ts";
+import { ImageIcon } from "./Icons.tsx";
 
 type PointerHandler = (e: ReactPointerEvent<HTMLButtonElement>) => void;
 
@@ -82,9 +83,21 @@ export function SlotCard({
       data-geometry="time"
     >
       <span className="block truncate font-medium">{slot.name}</span>
-      <span className="block truncate opacity-80">
-        {slot.user.username}
-        {running ? " · running" : ""}
+      <span className="flex items-center gap-1 truncate opacity-80">
+        <span className="truncate">
+          {slot.user.username}
+          {running ? " · running" : ""}
+        </span>
+        {slot.images.length > 0 ? (
+          <span
+            className="inline-flex shrink-0 items-center gap-0.5"
+            title={`${slot.images.length} image${slot.images.length === 1 ? "" : "s"}`}
+            data-testid="image-count"
+          >
+            <ImageIcon size={12} />
+            {slot.images.length}
+          </span>
+        ) : null}
       </span>
     </button>
   );

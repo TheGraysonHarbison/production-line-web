@@ -1,9 +1,10 @@
 import { type Me, UpdateMeBodySchema } from "@production-line/shared";
 import type { FastifyPluginAsync } from "fastify";
-import { forbidden, HttpError } from "../errors.js";
+import { HttpError } from "../errors.js";
 import { requireAuth } from "../plugins/auth.js";
 import { hashPassword, verifyPassword } from "../services/crypto.js";
 import { toMe, type UpdateUserInput } from "../services/users.js";
+import { assertImagesEnabled, filePart } from "./images.js";
 
 export const meRoutes: FastifyPluginAsync = async (app) => {
   app.get("/me", { preHandler: requireAuth }, async (request): Promise<Me> => {
@@ -32,10 +33,41 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     return toMe(updated);
   });
 
-  // Avatar upload/removal arrive with image support (Phase 9). Registered now so the API shape is stable.
-  const imagesDisabled = async () => {
-    throw forbidden("images_disabled", "image uploads are not enabled");
-  };
-  app.put("/me/avatar", { preHandler: requireAuth }, imagesDisabled);
-  app.delete("/me/avatar", { preHandler: requireAuth }, imagesDisabled);
+  // Profile image (§3.8): replacing deletes the old file; removal clears it.
+  app.put("/me/avatar", { preHandler: requireAuth }, async (request): Promise<Me> => {
+    const user = request.user as NonNullable<typeof request.user>;
+    assertImagesEnabled(app.ctx.settings.getValues().images_enabled);
+    const part = await filePart(request);
+    const image = await app.ctx.images.store({
+      stream: part.file,
+      originalName: part.filename,
+      uploaderId: user.id,
+      slotId: null,
+    });
+    const previous =
+      user.avatar_image_id === null ? null : app.ctx.images.get(user.avatar_image_id);
+    const updated = app.ctx.users.setAvatar(user.id, image.id);
+    if (previous) {
+      app.ctx.images.removeRow(previous.id);
+      await app.ctx.images.unlinkFile(previous.stored_name);
+    }
+    request.log.info(
+      { userId: user.id, image: image.id, replaced: previous?.id ?? null },
+      "avatar.set",
+    );
+    return toMe(updated);
+  });
+
+  app.delete("/me/avatar", { preHandler: requireAuth }, async (request): Promise<Me> => {
+    const user = request.user as NonNullable<typeof request.user>;
+    const previous =
+      user.avatar_image_id === null ? null : app.ctx.images.get(user.avatar_image_id);
+    const updated = app.ctx.users.setAvatar(user.id, null);
+    if (previous) {
+      app.ctx.images.removeRow(previous.id);
+      await app.ctx.images.unlinkFile(previous.stored_name);
+    }
+    request.log.info({ userId: user.id, removed: previous?.id ?? null }, "avatar.removed");
+    return toMe(updated);
+  });
 };

@@ -159,3 +159,97 @@ test("admin tests Home Assistant delivery against a mock instance", async ({ pag
     ha.close();
   }
 });
+
+test("images: enable, upload a PNG and a RAW onto a slot, set an avatar, then disable", async ({
+  page,
+  baseURL,
+}) => {
+  const { fileURLToPath } = await import("node:url");
+  const { dirname, join } = await import("node:path");
+  const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+  await signInAsOwner(page);
+
+  // Turn images on.
+  await page.goto("/settings/general");
+  const toggle = page.getByLabel("Allow images");
+  await toggle.check();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText(/saved/i);
+
+  // A slot of ours, tomorrow.
+  const printerRes = await page.request.post("/api/printers", {
+    headers: { origin: baseURL as string },
+    data: { name: `Img-${suffix()}` },
+  });
+  const printer = (await printerRes.json()) as { id: number };
+  const meta = await (await page.request.get("/api/meta")).json();
+  const start = new Date(Math.ceil((Date.now() + 24 * 3_600_000) / 300_000) * 300_000);
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: meta.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(start);
+  const slotName = `Photos-${suffix()}`;
+  const slotRes = await page.request.post("/api/slots", {
+    headers: { origin: baseURL as string },
+    data: {
+      name: slotName,
+      start_at: start.toISOString(),
+      end_at: new Date(start.getTime() + 3_600_000).toISOString(),
+      printer_ids: [printer.id],
+    },
+  });
+  expect(slotRes.status()).toBe(201);
+
+  // Upload a PNG (thumbnail) and a RAW (file card) from the editor.
+  await page.goto(`/day/${date}`);
+  const card = page.getByTestId("slot-card").filter({ hasText: slotName });
+  await card.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
+  await dialog
+    .getByTestId("image-upload")
+    .setInputFiles([join(fixtures, "checker.png"), join(fixtures, "sample.raf")]);
+  await expect(dialog.getByTestId("image-thumb")).toHaveCount(1);
+  await expect(dialog.getByTestId("image-card")).toHaveCount(1);
+  await expect(dialog.getByTestId("image-card")).toContainText("sample.raf");
+  await expect(dialog.getByTestId("image-card")).toHaveAttribute("download", "sample.raf");
+  await expect(dialog.getByTestId("upload-progress")).toHaveCount(0);
+  // The thumbnail really loaded through the serving route.
+  const thumb = dialog.getByTestId("image-thumb").locator("img");
+  await expect.poll(() => thumb.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(8);
+  // A disguised script is refused with a readable message.
+  await dialog.getByTestId("image-upload").setInputFiles([join(fixtures, "script.png")]);
+  await expect(dialog.getByTestId("upload-progress")).toContainText(/not a supported image/i);
+  await dialog.getByRole("button", { name: "Dismiss script.png" }).click();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(card.getByTestId("image-count")).toHaveText("2");
+
+  // Profile image: upload, see it in the dock, remove it.
+  await page.goto("/settings/profile");
+  await page.getByTestId("avatar-upload").setInputFiles(join(fixtures, "checker.png"));
+  await expect(page.getByRole("status")).toHaveText(/profile image updated/i);
+  // Both the dock and the profile section switch from the initial to the uploaded image.
+  await expect(page.getByTestId("avatar-image")).toHaveCount(2);
+  await expect(page.getByTestId("avatar-image").first()).toHaveAttribute(
+    "src",
+    /\/api\/images\/[0-9a-f-]{36}\.png$/,
+  );
+  await page.getByRole("button", { name: "Remove image" }).click();
+  await expect(page.getByRole("status")).toHaveText(/profile image removed/i);
+  await expect(page.getByRole("button", { name: "Remove image" })).toHaveCount(0);
+
+  // Turn images off: the upload control disappears, the existing images stay.
+  await page.goto("/settings/general");
+  await toggle.uncheck();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText(/saved/i);
+  await page.goto(`/day/${date}`);
+  await card.click();
+  await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
+  await expect(dialog.getByTestId("image-upload")).toHaveCount(0);
+  await expect(dialog.getByTestId("image-thumb")).toHaveCount(1);
+  await expect(dialog.getByTestId("image-card")).toHaveCount(1);
+  await expect(page.getByTestId("avatar-upload")).toHaveCount(0);
+});

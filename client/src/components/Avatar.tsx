@@ -29,6 +29,7 @@ export function Avatar({
         height={size}
         className="shrink-0 rounded-full object-cover"
         style={{ width: size, height: size }}
+        data-testid="avatar-image"
       />
     );
   }
