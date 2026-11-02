@@ -13,7 +13,7 @@ docker compose version >/dev/null 2>&1 || die "the 'docker compose' plugin is re
 
 DIR="${PLW_DIR:-$HOME/production-line-web}"
 PORT="${PLW_PORT:-8080}"
-IMAGE="${PLW_IMAGE:-ghcr.io/goblinfoddergames/production-line-web:latest}"
+IMAGE="${PLW_IMAGE:-ghcr.io/thegraysonharbison/production-line-web:latest}"
 TZ_VALUE="${PLW_TZ:-${TZ:-}}"
 if [ -z "$TZ_VALUE" ]; then
   TZ_VALUE="$(cat /etc/timezone 2>/dev/null || timedatectl show -p Timezone --value 2>/dev/null || true)"

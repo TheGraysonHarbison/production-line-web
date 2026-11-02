@@ -531,7 +531,7 @@ All targets expect **Node 26** to be present on the host (standalone) or in the 
 # deploy/docker/compose.yaml
 services:
   production-line:
-    image: ghcr.io/goblinfoddergames/production-line-web:latest
+    image: ghcr.io/thegraysonharbison/production-line-web:latest
     ports: ["8080:8080"]
     volumes: ["plw-data:/data"]
     environment:
@@ -553,7 +553,7 @@ Rootless Podman with systemd user units. `scripts/install-podman.sh` copies the 
 Description=Production Line Web
 
 [Container]
-Image=ghcr.io/goblinfoddergames/production-line-web:latest
+Image=ghcr.io/thegraysonharbison/production-line-web:latest
 PublishPort=8080:8080
 Volume=plw-data:/data
 Environment=TZ=America/New_York
@@ -660,3 +660,4 @@ WantedBy=multi-user.target
 | D10 | App-wide display timezone from settings, not per-device | Everyone on the LAN talks about the same wall clock |
 | D11 | Raspberry Pi 4/5 (arm64) only | 32-bit Pis are not viable with current Node |
 | D12 | Node must be preinstalled on standalone hosts | Per product decision; scripts only set up and start the app |
+| D23 | Images are published as `ghcr.io/thegraysonharbison/production-line-web`, the repository owner's namespace | The `goblinfoddergames` namespace named in §15 does not exist on GitHub and GHCR refused the push; `GITHUB_TOKEN` publishes under the repository owner without extra secrets |

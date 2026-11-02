@@ -12,7 +12,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/goblinfoddergames/production-line-web
+  IMAGE: ghcr.io/thegraysonharbison/production-line-web
 
 jobs:
   release:
