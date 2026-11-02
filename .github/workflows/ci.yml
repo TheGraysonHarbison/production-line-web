@@ -69,6 +69,6 @@ jobs:
           done
           echo "server did not become healthy"; docker logs plw; exit 1
       - name: Upgrade test from the last published image (skipped until one exists)
-        run: scripts/upgrade-test.sh ghcr.io/goblinfoddergames/production-line-web:latest production-line-web:ci
+        run: scripts/upgrade-test.sh ghcr.io/thegraysonharbison/production-line-web:latest production-line-web:ci
       - name: Release tarball builds
         run: npm run release -- --no-build

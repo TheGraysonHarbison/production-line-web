@@ -11,7 +11,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Container]
-Image=ghcr.io/goblinfoddergames/production-line-web:latest
+Image=ghcr.io/thegraysonharbison/production-line-web:latest
 ContainerName=production-line
 PublishPort=8080:8080
 Volume=plw-data:/data

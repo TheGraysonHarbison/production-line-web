@@ -16,7 +16,7 @@ PODMAN_MAJOR="$(podman version --format '{{.Client.Version}}' | cut -d. -f1)"
 [ "$PODMAN_MAJOR" -ge 4 ] 2>/dev/null || die "Podman 4.4 or newer is required for Quadlet (found $(podman version --format '{{.Client.Version}}'))."
 
 PORT="${PLW_PORT:-8080}"
-IMAGE="${PLW_IMAGE:-ghcr.io/goblinfoddergames/production-line-web:latest}"
+IMAGE="${PLW_IMAGE:-ghcr.io/thegraysonharbison/production-line-web:latest}"
 TZ_VALUE="${PLW_TZ:-${TZ:-}}"
 if [ -z "$TZ_VALUE" ]; then
   TZ_VALUE="$(cat /etc/timezone 2>/dev/null || timedatectl show -p Timezone --value 2>/dev/null || true)"
