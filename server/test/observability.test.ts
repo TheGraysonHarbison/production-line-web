@@ -60,7 +60,7 @@ describe("observability (dev doc §17)", () => {
     expect(incoming?.level).toBe(30);
     expect(incoming?.reqId).toBeTruthy();
     expect(completed?.reqId).toBe(incoming?.reqId);
-    expect((completed?.res as { statusCode: number }).statusCode).toBe(200);
+    expect((completed?.res as { statusCode: number } | undefined)?.statusCode).toBe(200);
   });
 
   it("auth.login_failed carries the username and IP", async () => {

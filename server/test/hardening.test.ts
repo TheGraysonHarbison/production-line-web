@@ -8,7 +8,7 @@ import { ExpiryScheduler } from "../src/services/expiry.js";
 import { HaClient } from "../src/services/ha.js";
 import type { UserRow } from "../src/services/users.js";
 import { ORIGIN, request, seedRoles } from "./auth-helpers.js";
-import { createTestApp, createTestContext, type TestApp, type TestContext } from "./helpers.js";
+import { createTestApp, createTestContext, type TestContext } from "./helpers.js";
 
 /** Dev doc §7: the only routes that work without a session. */
 const PUBLIC_ROUTES = new Set([
