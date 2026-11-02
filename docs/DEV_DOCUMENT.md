@@ -531,7 +531,7 @@ All targets expect **Node 26** to be present on the host (standalone) or in the 
 # deploy/docker/compose.yaml
 services:
   production-line:
-    image: ghcr.io/goblinfoddergames/production-line-web:latest
+    image: ghcr.io/thegraysonharbison/production-line-web:latest
     ports: ["8080:8080"]
     volumes: ["plw-data:/data"]
     environment:
@@ -553,7 +553,7 @@ Rootless Podman with systemd user units. `scripts/install-podman.sh` copies the 
 Description=Production Line Web
 
 [Container]
-Image=ghcr.io/goblinfoddergames/production-line-web:latest
+Image=ghcr.io/thegraysonharbison/production-line-web:latest
 PublishPort=8080:8080
 Volume=plw-data:/data
 Environment=TZ=America/New_York
@@ -670,3 +670,4 @@ WantedBy=multi-user.target
 | D20 | Quadlet-generated units are started, not `enable`d; lingering provides boot start | systemd refuses `enable` on generated units; the `[Install]` section is honoured by the generator (§15.2) |
 | D21 | The standalone installer pins the absolute Node path it found into a drop-in | systemd's PATH does not include version managers; the unit itself stays generic |
 | D22 | The desktop dock shows the next five bookings and each printer's current or next slot with its author; Settings sits above the user row | Owner's request during review, so the dock answers "who is on what, and what is next" without opening the timeline (§11.1) |
+| D23 | Images are published as `ghcr.io/thegraysonharbison/production-line-web`, the repository owner's namespace | The `goblinfoddergames` namespace named in §15 does not exist on GitHub and GHCR refused the push; `GITHUB_TOKEN` publishes under the repository owner without extra secrets |

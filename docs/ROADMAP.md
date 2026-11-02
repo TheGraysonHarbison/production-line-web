@@ -418,7 +418,7 @@ Client:
 - `deploy/systemd/production-line.service` with the §15.3 hardening (`ProtectSystem=strict`, `ReadWritePaths`, `PrivateTmp`, `NoNewPrivileges`, dedicated `plweb` user). `scripts/install-standalone.sh`: Node ≥ 26 check with a link on failure, user + `/var/lib/production-line` (0750), release tarball to `/opt/production-line-web`, `npm ci --omit=dev` as `plweb`, `--from-source` flag, enable + start, print URL. `scripts/uninstall-standalone.sh` with `--purge` (§15.3). Scripts are POSIX-sh-compatible or clearly `#!/usr/bin/env bash`, idempotent, and safe to re-run for upgrades (§15.4).
 - `scripts/dev-setup-bazzite.sh`: installs fnm via brew, pins Node 26, `npm ci`, installs Playwright browsers (§14).
 - Release build: a `release` npm script producing the tarball (`server/dist`, `server/public`, `package.json`, `package-lock.json`, migrations) that the standalone installer consumes.
-- CI: on tag `v*`, build and push `ghcr.io/goblinfoddergames/production-line-web` for `linux/amd64` + `linux/arm64` with `:latest` and `:<version>` tags, attach the release tarball to the GitHub release, run the container smoke test against the pushed image.
+- CI: on tag `v*`, build and push `ghcr.io/thegraysonharbison/production-line-web` for `linux/amd64` + `linux/arm64` with `:latest` and `:<version>` tags, attach the release tarball to the GitHub release, run the container smoke test against the pushed image.
 - Upgrade test in CI: start version N−1 image with a seeded volume, swap to N, assert migrations applied and data intact (§15.4).
 - `TZ` documented in all deploy files; `DATA_DIR` defaults per target (§13).
 

@@ -6,7 +6,7 @@
 # database, the secret key, and uploaded images all live on the plw-data volume.
 services:
   production-line:
-    image: ghcr.io/goblinfoddergames/production-line-web:latest
+    image: ghcr.io/thegraysonharbison/production-line-web:latest
     container_name: production-line
     ports:
       - "8080:8080"

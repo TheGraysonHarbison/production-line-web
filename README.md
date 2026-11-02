@@ -33,7 +33,7 @@ curl -fsSLO https://raw.githubusercontent.com/TheGraysonHarbison/production-line
 bash install-docker.sh
 ```
 
-Writes `~/production-line-web/compose.yaml` (image `ghcr.io/goblinfoddergames/production-line-web`, data on the `plw-data` volume, `TZ` from the host) and runs `docker compose up -d`. Upgrade: re-run the script. Remove: `docker compose -f ~/production-line-web/compose.yaml down` (add `-v` to delete the data volume).
+Writes `~/production-line-web/compose.yaml` (image `ghcr.io/thegraysonharbison/production-line-web`, data on the `plw-data` volume, `TZ` from the host) and runs `docker compose up -d`. Upgrade: re-run the script. Remove: `docker compose -f ~/production-line-web/compose.yaml down` (add `-v` to delete the data volume).
 
 ### Podman (rootless, Quadlet)
 
