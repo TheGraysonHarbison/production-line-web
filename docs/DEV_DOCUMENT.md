@@ -628,8 +628,8 @@ WantedBy=multi-user.target
 |---|---|---|
 | Unit | Vitest | 5-minute rounding, conflict math, palette derivation, Zod schemas, crypto helpers |
 | Integration | Vitest + Fastify `inject()` + temp SQLite | Every route's auth/role matrix, conflict `409`s, extend-into-neighbour, user-delete cascade, expiry + catch-up (fake timers), HA client against a mock server |
-| E2E | Playwright (desktop + mobile projects) | First-boot → owner → settings; create/edit/extend/delete slot; two browser contexts see each other's changes via SSE; image upload on/off |
-| Build | CI | `npm ci`, lint, tests, multi-arch image build, container smoke test (`/api/meta`) |
+| E2E | Playwright (desktop, tablet, and mobile projects, then a serial admin project) | First-boot → owner → settings; create/edit/extend/delete slot; two browser contexts see each other's changes via SSE; image upload on/off; HA test against a mock; backup download. Runs against a locally started server and, in CI, against the built container (`scripts/e2e-container.sh`) |
+| Build | CI | `npm ci`, lint, tests, multi-arch image build, container smoke test (`/api/meta`), upgrade test, release tarball; on a `v*` tag the same against the pushed image |
 
 ---
 
@@ -660,4 +660,14 @@ WantedBy=multi-user.target
 | D10 | App-wide display timezone from settings, not per-device | Everyone on the LAN talks about the same wall clock |
 | D11 | Raspberry Pi 4/5 (arm64) only | 32-bit Pis are not viable with current Node |
 | D12 | Node must be preinstalled on standalone hosts | Per product decision; scripts only set up and start the app |
+| D13 | Changing a password revokes the user's *other* sessions, not the current one | The person changing it stays signed in; everything else is cut off (§9.1 said "all") |
+| D14 | The timeline is one continuous strip from shortly before now to the booking horizon; `/day/:date` only chooses where it opens | Users asked to scroll across days without reloading; the past takes little room and a Now button returns (§11.2) |
+| D15 | Drags are clamped on the client to the window the server enforces | A release never produces a past/horizon error; the server stays the authority |
+| D16 | The editor's time fields are hour and minute selects on the 5-minute grid rather than `<input type=time step=300>` | `step` is advisory and Firefox's picker ignores it; selects give every browser the same grid and phones a wheel (§11.2) |
+| D17 | Server rounds slot times to the nearest 5 minutes and accepts a start at the current mark | Lets the client send "now"; a slot started now is immediately running |
+| D18 | Deleting a user cascades its slots (with per-slot events) but deleting a printer in use is refused | Users own their bookings; printers are shared infrastructure (D9) |
+| D19 | CSP is strict (`style-src 'self'`); per-user colours are written through the CSSOM | No `unsafe-inline` anywhere; the theme still follows the user |
+| D20 | Quadlet-generated units are started, not `enable`d; lingering provides boot start | systemd refuses `enable` on generated units; the `[Install]` section is honoured by the generator (§15.2) |
+| D21 | The standalone installer pins the absolute Node path it found into a drop-in | systemd's PATH does not include version managers; the unit itself stays generic |
+| D22 | The desktop dock shows the next five bookings and each printer's current or next slot with its author; Settings sits above the user row | Owner's request during review, so the dock answers "who is on what, and what is next" without opening the timeline (§11.1) |
 | D23 | Images are published as `ghcr.io/thegraysonharbison/production-line-web`, the repository owner's namespace | The `goblinfoddergames` namespace named in §15 does not exist on GitHub and GHCR refused the push; `GITHUB_TOKEN` publishes under the repository owner without extra secrets |
