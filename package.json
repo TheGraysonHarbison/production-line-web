@@ -20,7 +20,7 @@
     "pretest": "npm run build -w packages/shared",
     "test": "vitest run --project shared --project server --project client",
     "e2e": "playwright test -c e2e/playwright.config.ts",
-    "lint": "biome check .",
+    "lint": "biome check . && node scripts/check-sql.mjs",
     "lint:fix": "biome check --write .",
     "typecheck": "npm run build -w packages/shared && tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit",
     "db:migrate": "node server/dist/db/migrate-cli.js"

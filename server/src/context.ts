@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { bootstrapDataDir, type DataDir } from "./data-dir.js";
-import { openDatabase } from "./db/connection.js";
+import { closeDatabase, openDatabase } from "./db/connection.js";
 import { migrate } from "./db/migrate.js";
 import { AppEvents } from "./events.js";
 import { Broadcaster } from "./services/broadcaster.js";
@@ -103,5 +103,5 @@ export function createContext(config: Config, log: Logger): AppContext {
 export function closeContext(ctx: AppContext): void {
   void ctx.expiry.stop();
   ctx.broadcaster.stop();
-  ctx.db.close();
+  closeDatabase(ctx.db);
 }

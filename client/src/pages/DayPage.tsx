@@ -1,5 +1,5 @@
 import { SLOT_HORIZON_MS, type Slot } from "@production-line/shared";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ChevronLeftIcon, ChevronRightIcon } from "../components/Icons.tsx";
 import { errorNoticeClass } from "../components/Notice.tsx";
@@ -53,15 +53,18 @@ export function DayPage() {
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(date);
   const today = todayPlainDate(tz, now);
   // Fixed per requested day so the strip doesn't creep while you look at it; `today` is in the
-  // list purely so a tab left open past midnight extends the strip by a day.
+  // list purely so a tab left open past midnight extends the strip by a day. The bounds object
+  // is keyed on its own strings so stepping between days inside the same strip keeps it stable
+  // (the memoised timeline then skips a full re-render).
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
-  const strip = useMemo(
+  const [from, to] = useMemo(
     () =>
       valid
-        ? rangeBounds(stripOrigin(date, tz, Date.now()), stripEnd(tz, Date.now()))
-        : rangeBounds("1970-01-01T00:00:00.000Z", "1970-01-02T00:00:00.000Z"),
+        ? [stripOrigin(date, tz, Date.now()), stripEnd(tz, Date.now())]
+        : ["1970-01-01T00:00:00.000Z", "1970-01-02T00:00:00.000Z"],
     [date, tz, valid, today],
   );
+  const strip = useMemo(() => rangeBounds(from, to), [from, to]);
   const slots = useSlotsRange(strip.from, strip.to);
 
   // The URL changed (calendar, dock "Today", browser navigation): scroll to that day.
@@ -69,31 +72,41 @@ export function DayPage() {
     setJump((j) => (j.to === date ? j : { to: date, seq: j.seq + 1, smooth: false }));
   }, [date]);
 
-  if (!valid) return <p role="alert">Unknown day.</p>;
-
   const viewDate = viewed?.for === date ? viewed.date : date;
   const go = (target: string) => {
     setJump((j) => ({ to: target, seq: j.seq + 1, smooth: true }));
     if (target !== "now" && target !== date) navigate(`/day/${target}`, { replace: true });
   };
-  const onCreate = (r: DragRange) =>
-    editor.openCreate({ start_at: r.start_at, end_at: r.end_at, printer_ids: [r.printer.id] });
-  const onChange = (slot: Slot, patch: { start_at?: string; end_at?: string }) => {
-    setNotice(null);
-    update.mutate(
-      { id: slot.id, ...patch },
-      {
-        onError: (err) => {
-          const code = err instanceof ApiError ? err.code : "error";
-          setNotice(
-            err instanceof ApiError
-              ? (DRAG_ERRORS[code] ?? err.message)
-              : "Could not change the slot.",
-          );
+  const { openCreate } = editor;
+  const onCreate = useCallback(
+    (r: DragRange) =>
+      openCreate({ start_at: r.start_at, end_at: r.end_at, printer_ids: [r.printer.id] }),
+    [openCreate],
+  );
+  const { mutate } = update;
+  const onChange = useCallback(
+    (slot: Slot, patch: { start_at?: string; end_at?: string }) => {
+      setNotice(null);
+      mutate(
+        { id: slot.id, ...patch },
+        {
+          onError: (err) => {
+            const code = err instanceof ApiError ? err.code : "error";
+            setNotice(
+              err instanceof ApiError
+                ? (DRAG_ERRORS[code] ?? err.message)
+                : "Could not change the slot.",
+            );
+          },
         },
-      },
-    );
-  };
+      );
+    },
+    [mutate],
+  );
+  const onViewDate = useCallback((d: string) => setViewed({ for: date, date: d }), [date]);
+
+  if (!valid) return <p role="alert">Unknown day.</p>;
+
   const vertical = viewport === "mobile";
   const hint = vertical
     ? "Scroll through the next 30 days. Tap a free spot to book an hour there, or tap a printer's name. Open a slot to change its times."
@@ -164,7 +177,7 @@ export function DayPage() {
           onCreate={onCreate}
           onOpen={editor.openEdit}
           onChange={onChange}
-          onViewDate={(d) => setViewed({ for: date, date: d })}
+          onViewDate={onViewDate}
         />
       ) : null}
       {vertical ? null : <p className="text-ink-muted text-xs">{hint}</p>}

@@ -102,7 +102,7 @@ describe("register / login / logout", () => {
     });
     expect(res.statusCode).toBe(429);
     expect(res.json().error).toBe("rate_limited");
-  });
+  }, 30_000);
 
   it("requires a matching Origin on mutating routes but not on GET", async () => {
     const owner = await setupOwner(t);

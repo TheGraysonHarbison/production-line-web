@@ -1,3 +1,4 @@
+import type { Slot } from "@production-line/shared";
 import type { Logger } from "pino";
 import { HttpError } from "../errors.js";
 import {
@@ -77,7 +78,7 @@ export class ExpiryScheduler {
   }
 
   private async process(catchUp: boolean): Promise<number> {
-    const { slots, settings, ha, log } = this.deps;
+    const { slots, log } = this.deps;
     const expired = slots.listExpired(this.now().toISOString());
     if (catchUp) {
       log.info({ count: expired.length, ids: expired.map((s) => s.id) }, "expiry.catchup");
@@ -85,37 +86,48 @@ export class ExpiryScheduler {
     let processed = 0;
     for (const slot of expired) {
       if (this.stopped && processed > 0) break;
-      const timezone = settings.getValues().timezone ?? "UTC";
-      const payload = buildExpiredPayload(slot, timezone, this.now().toISOString(), catchUp);
-      let delivery: HaDeliveryResult = {
-        status: "skipped",
-        httpStatus: null,
-        attempts: 0,
-        error: null,
-      };
-      if (ha.isEnabled()) delivery = await ha.fire(HA_EXPIRED_EVENT, payload);
       try {
-        slots.delete(slot.id, "expired");
+        if (await this.processOne(slot, catchUp)) processed++;
       } catch (err) {
-        // Deleted by hand while HA was being notified: nothing left to do.
-        if (err instanceof HttpError && err.code === "slot_not_found") {
-          log.info({ slotId: slot.id }, "expiry.vanished");
-          continue;
-        }
-        throw err;
+        // One bad slot (disk, DB, a bug) must not hold up the rest; it is retried next tick.
+        log.error({ err, slotId: slot.id }, "expiry.slot_failed");
       }
-      log.info(
-        {
-          slotId: slot.id,
-          ha: delivery.status,
-          haStatus: delivery.httpStatus,
-          attempts: delivery.attempts,
-          catchUp,
-        },
-        "expiry.processed",
-      );
-      processed++;
     }
     return processed;
+  }
+
+  /** Returns false when the slot vanished before it could be processed. */
+  private async processOne(slot: Slot, catchUp: boolean): Promise<boolean> {
+    const { slots, settings, ha, log } = this.deps;
+    const timezone = settings.getValues().timezone ?? "UTC";
+    const payload = buildExpiredPayload(slot, timezone, this.now().toISOString(), catchUp);
+    let delivery: HaDeliveryResult = {
+      status: "skipped",
+      httpStatus: null,
+      attempts: 0,
+      error: null,
+    };
+    if (ha.isEnabled()) delivery = await ha.fire(HA_EXPIRED_EVENT, payload);
+    try {
+      slots.delete(slot.id, "expired");
+    } catch (err) {
+      // Deleted by hand while HA was being notified: nothing left to do.
+      if (err instanceof HttpError && err.code === "slot_not_found") {
+        log.info({ slotId: slot.id }, "expiry.vanished");
+        return false;
+      }
+      throw err;
+    }
+    log.info(
+      {
+        slotId: slot.id,
+        ha: delivery.status,
+        haStatus: delivery.httpStatus,
+        attempts: delivery.attempts,
+        catchUp,
+      },
+      "expiry.processed",
+    );
+    return true;
   }
 }

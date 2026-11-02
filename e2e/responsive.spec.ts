@@ -111,6 +111,7 @@ test.describe("touch layouts", () => {
       "/settings/printers",
       "/settings/general",
       "/settings/home-assistant",
+      "/settings/backup",
       "/settings/users",
     ]) {
       await page.goto(path);

@@ -1,9 +1,11 @@
-import type { Printer, Slot } from "@production-line/shared";
+import type { Me, Printer, Slot } from "@production-line/shared";
 import {
+  memo,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -17,6 +19,7 @@ import {
   formatTime,
   isoFromMs,
   minutesInto,
+  type RangeDay,
   rangeDays,
   rangeTicks,
   snapMinutes,
@@ -34,6 +37,15 @@ const COLUMN_HEADER = 48;
 const MIN_COLUMN = 120;
 /** How far before the target a jump lands, so the thing you asked for isn't flush with the edge. */
 const JUMP_LEAD_MINUTES = 30;
+/** Card windowing: re-measure in 12-hour steps, keep a day of cards beyond each viewport edge. */
+const WINDOW_STEP = 12 * 60;
+const WINDOW_SLACK = 24 * 60;
+
+/** Minutes into the strip that lanes currently mount cards for. */
+interface ViewWindow {
+  from: number;
+  to: number;
+}
 
 export type Orientation = "horizontal" | "vertical";
 
@@ -86,6 +98,36 @@ interface DragState {
   moved: boolean;
 }
 
+/** Where a slot sits, in minutes into the strip, including an in-progress drag on it. */
+function displayRange(slot: Slot, stripFrom: string, drag: DragState | null) {
+  let start = minutesInto(slot.start_at, stripFrom);
+  let end = minutesInto(slot.end_at, stripFrom);
+  if (drag?.slot?.id === slot.id) {
+    if (drag.kind === "resize-end") end = Math.max(drag.current, start + 5);
+    else if (drag.kind === "resize-start") start = Math.min(drag.current, end - 5);
+    else if (drag.kind === "move") {
+      const delta = drag.current - drag.anchor;
+      start += delta;
+      end += delta;
+    }
+  }
+  return { start, end };
+}
+
+/** Everything the pointer handlers need, kept in a ref so the handlers themselves stay stable. */
+interface Live {
+  stripFrom: string;
+  stripMinutes: number;
+  nowMinute: number;
+  horizonMinute: number;
+  liveLo: number;
+  liveHi: number;
+  vertical: boolean;
+  onCreate: TimelineProps["onCreate"];
+  onOpen: TimelineProps["onOpen"];
+  onChange: TimelineProps["onChange"];
+}
+
 /**
  * The timeline strip (dev doc §11.2): one lane per printer running from shortly before now to the
  * 30-day booking horizon, scrolling across days. Hour ticks, date markers at midnight, hatched
@@ -94,8 +136,12 @@ interface DragState {
  * touch a tap opens the editor instead, so the page still scrolls). Every drag is clamped to the
  * bookable window, so nothing lands in the past or past the horizon. A tap without movement books
  * an hour at that time; keyboard users create via the per-lane "Book" button.
+ *
+ * Each lane is memoised: a drag re-renders only its own lane, and page state (heading, notices,
+ * the editor) never touches the cards. With thousands of slots that is the difference between a
+ * smooth scroll and a stall.
  */
-export function Timeline({
+export const Timeline = memo(function Timeline({
   strip,
   horizon,
   printers,
@@ -112,17 +158,79 @@ export function Timeline({
   const tz = useTimeZone();
   const fmt = useTimeFormat();
   const me = useMe();
-  const ticks: Tick[] = rangeTicks(strip.from, strip.to, tz, fmt);
-  const days = rangeDays(strip.from, strip.to, tz);
+  const ticks = useMemo(
+    () => rangeTicks(strip.from, strip.to, tz, fmt),
+    [strip.from, strip.to, tz, fmt],
+  );
+  const days = useMemo(() => rangeDays(strip.from, strip.to, tz), [strip.from, strip.to, tz]);
   const length = minuteToX(strip.minutes);
   const nowMinute = Math.min(Math.max(minutesInto(isoFromMs(now), strip.from), 0), strip.minutes);
   const horizonMinute = Math.min(minutesInto(isoFromMs(horizon), strip.from), strip.minutes);
   // The bookable window: the first 5-minute mark not yet past, through the horizon.
   const liveLo = snapMinutes(nowMinute, "ceil");
   const liveHi = snapMinutes(horizonMinute, "floor");
-  const [drag, setDrag] = useState<DragState | null>(null);
+  const [drag, setDragState] = useState<DragState | null>(null);
+  // Pointer events can arrive faster than React renders; the ref is the source of truth for the
+  // handlers and the state only drives rendering.
+  const dragRef = useRef<DragState | null>(null);
+  const setDrag = useCallback((next: DragState | null) => {
+    dragRef.current = next;
+    setDragState(next);
+  }, []);
   const laneRefs = useRef(new Map<number, HTMLDivElement>());
   const scrollerRef = useRef<HTMLDivElement>(null);
+
+  // Only cards near the viewport are mounted. The window is quantised to 12-hour steps with a
+  // day of slack on each side, so scrolling re-renders the lanes a couple of times per day of
+  // travel instead of on every frame, and a 30-day strip with thousands of slots stays light.
+  const [viewWindow, setViewWindow] = useState<ViewWindow | null>(null);
+  const measureWindow = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const v = live.current.vertical;
+    const offset = xToMinute(v ? el.scrollTop : el.scrollLeft);
+    const size = xToMinute(v ? el.clientHeight : el.clientWidth);
+    const from = Math.floor((offset - WINDOW_SLACK) / WINDOW_STEP) * WINDOW_STEP;
+    const to = Math.ceil((offset + size + WINDOW_SLACK) / WINDOW_STEP) * WINDOW_STEP;
+    setViewWindow((w) => (w && w.from === from && w.to === to ? w : { from, to }));
+  }, []);
+  useLayoutEffect(() => {
+    measureWindow();
+    const el = scrollerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(measureWindow);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measureWindow]);
+
+  // Handlers read the latest values through this ref, so they can be created once and the lanes
+  // they are passed to can be memoised.
+  const live = useRef<Live>({
+    stripFrom: strip.from,
+    stripMinutes: strip.minutes,
+    nowMinute,
+    horizonMinute,
+    liveLo,
+    liveHi,
+    vertical,
+    onCreate,
+    onOpen,
+    onChange,
+  });
+  useEffect(() => {
+    live.current = {
+      stripFrom: strip.from,
+      stripMinutes: strip.minutes,
+      nowMinute,
+      horizonMinute,
+      liveLo,
+      liveHi,
+      vertical,
+      onCreate,
+      onOpen,
+      onChange,
+    };
+  });
 
   // Scroll requests from the page (initial day, Previous/Next day, Now).
   const handledJump = useRef(-1);
@@ -146,6 +254,7 @@ export function Timeline({
   // Report the day at the leading edge as the user scrolls.
   const lastViewDate = useRef("");
   const onScroll = () => {
+    measureWindow();
     const el = scrollerRef.current;
     if (!el || !onViewDate) return;
     const minute = xToMinute(vertical ? el.scrollTop : el.scrollLeft) + 1;
@@ -179,52 +288,57 @@ export function Timeline({
     };
   }, [vertical]);
 
-  const minuteAt = useCallback(
-    (printerId: number, clientX: number, clientY: number) => {
-      const el = laneRefs.current.get(printerId);
-      if (!el) return 0;
-      const rect = el.getBoundingClientRect();
-      const px = vertical ? clientY - rect.top : clientX - rect.left;
-      return Math.min(Math.max(xToMinute(px), 0), strip.minutes);
-    },
-    [strip.minutes, vertical],
-  );
+  const minuteAt = useCallback((printerId: number, clientX: number, clientY: number) => {
+    const el = laneRefs.current.get(printerId);
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    const px = live.current.vertical ? clientY - rect.top : clientX - rect.left;
+    return Math.min(Math.max(xToMinute(px), 0), live.current.stripMinutes);
+  }, []);
 
   /** Clamps a pointer position to what the drag may legally produce (dev doc §3.3). */
-  const clampFor = (d: DragState, m: number): number => {
-    const s = d.slot ? minutesInto(d.slot.start_at, strip.from) : 0;
-    const e = d.slot ? minutesInto(d.slot.end_at, strip.from) : 0;
+  const clampFor = useCallback((d: DragState, m: number): number => {
+    const { stripFrom, liveLo: lo, liveHi: hi } = live.current;
+    const s = d.slot ? minutesInto(d.slot.start_at, stripFrom) : 0;
+    const e = d.slot ? minutesInto(d.slot.end_at, stripFrom) : 0;
     switch (d.kind) {
       case "create":
-        return Math.min(Math.max(m, liveLo), liveHi);
+        return Math.min(Math.max(m, lo), hi);
       case "resize-start":
-        return Math.min(Math.max(m, liveLo), e - 5);
+        return Math.min(Math.max(m, lo), e - 5);
       case "resize-end":
-        return Math.min(Math.max(m, s + 5, liveLo), liveHi);
+        return Math.min(Math.max(m, s + 5, lo), hi);
       case "move": {
-        const delta = Math.min(Math.max(m - d.anchor, liveLo - s), liveHi - e);
+        const delta = Math.min(Math.max(m - d.anchor, lo - s), hi - e);
         return d.anchor + delta;
       }
     }
-  };
+  }, []);
 
-  const onLanePointerDown = (printer: Printer) => (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || printer.invisible || e.target !== e.currentTarget) return;
-    const raw = minuteAt(printer.id, e.clientX, e.clientY);
-    // The hatched past and beyond-horizon areas aren't bookable; a press there does nothing.
-    if (raw < nowMinute || raw > horizonMinute) return;
-    const m = Math.max(snapMinutes(raw, "floor"), liveLo);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({ kind: "create", printer, anchor: m, current: m, moved: false });
-  };
+  const onLanePointerDown = useCallback(
+    (printer: Printer, e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || printer.invisible || e.target !== e.currentTarget) return;
+      const raw = minuteAt(printer.id, e.clientX, e.clientY);
+      // The hatched past and beyond-horizon areas aren't bookable; a press there does nothing.
+      if (raw < live.current.nowMinute || raw > live.current.horizonMinute) return;
+      const m = Math.max(snapMinutes(raw, "floor"), live.current.liveLo);
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setDrag({ kind: "create", printer, anchor: m, current: m, moved: false });
+    },
+    [minuteAt, setDrag],
+  );
 
-  const onHandlePointerDown =
-    (printer: Printer, slot: Slot, edge: "start" | "end") =>
-    (e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onHandlePointerDown = useCallback(
+    (
+      printer: Printer,
+      slot: Slot,
+      edge: "start" | "end",
+      e: ReactPointerEvent<HTMLButtonElement>,
+    ) => {
       if (e.button !== 0) return;
       e.stopPropagation();
       e.currentTarget.setPointerCapture(e.pointerId);
-      const m = minutesInto(edge === "end" ? slot.end_at : slot.start_at, strip.from);
+      const m = minutesInto(edge === "end" ? slot.end_at : slot.start_at, live.current.stripFrom);
       setDrag({
         kind: edge === "end" ? "resize-end" : "resize-start",
         printer,
@@ -233,239 +347,122 @@ export function Timeline({
         current: m,
         moved: false,
       });
-    };
+    },
+    [setDrag],
+  );
 
-  const onCardPointerDown =
-    (printer: Printer, slot: Slot) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onCardPointerDown = useCallback(
+    (printer: Printer, slot: Slot, e: ReactPointerEvent<HTMLButtonElement>) => {
       if (e.button !== 0 || e.pointerType === "touch") return;
       e.stopPropagation();
       e.currentTarget.setPointerCapture(e.pointerId);
       const m = snapMinutes(minuteAt(printer.id, e.clientX, e.clientY));
       setDrag({ kind: "move", printer, slot, anchor: m, current: m, moved: false });
-    };
+    },
+    [minuteAt, setDrag],
+  );
 
-  /** Where a slot sits right now, in minutes into the strip, including any in-progress drag. */
-  const displayRange = (slot: Slot): { start: number; end: number } => {
-    let start = minutesInto(slot.start_at, strip.from);
-    let end = minutesInto(slot.end_at, strip.from);
-    if (drag?.slot?.id === slot.id) {
-      if (drag.kind === "resize-end") end = Math.max(drag.current, start + 5);
-      else if (drag.kind === "resize-start") start = Math.min(drag.current, end - 5);
-      else if (drag.kind === "move") {
-        const delta = drag.current - drag.anchor;
-        start += delta;
-        end += delta;
-      }
-    }
-    return { start, end };
-  };
+  const onPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLElement>) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const m = clampFor(d, snapMinutes(minuteAt(d.printer.id, e.clientX, e.clientY)));
+      if (m !== d.current) setDrag({ ...d, current: m, moved: true });
+    },
+    [clampFor, minuteAt, setDrag],
+  );
 
-  const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
-    if (!drag) return;
-    const m = clampFor(drag, snapMinutes(minuteAt(drag.printer.id, e.clientX, e.clientY)));
-    if (m !== drag.current) setDrag({ ...drag, current: m, moved: true });
-  };
-
-  const onPointerUp = () => {
-    if (!drag) return;
+  const onPointerUp = useCallback(() => {
+    const d = dragRef.current;
+    if (!d) return;
     setDrag(null);
-    const iso = (m: number) => isoFromMs(Date.parse(strip.from) + m * 60_000);
-    if (drag.kind === "create") {
-      let start = Math.min(drag.anchor, drag.current);
-      let end = Math.max(drag.anchor, drag.current);
-      if (!drag.moved || end - start < 5) {
-        start = drag.anchor;
-        end = Math.min(drag.anchor + 60, liveHi);
+    const {
+      stripFrom,
+      liveHi: hi,
+      onCreate: create,
+      onOpen: open,
+      onChange: change,
+    } = live.current;
+    const iso = (m: number) => isoFromMs(Date.parse(stripFrom) + m * 60_000);
+    if (d.kind === "create") {
+      let start = Math.min(d.anchor, d.current);
+      let end = Math.max(d.anchor, d.current);
+      if (!d.moved || end - start < 5) {
+        start = d.anchor;
+        end = Math.min(d.anchor + 60, hi);
       }
       if (end - start < 5) return;
-      onCreate({ printer: drag.printer, start_at: iso(start), end_at: iso(end) });
-    } else if (drag.slot && !drag.moved) {
+      create({ printer: d.printer, start_at: iso(start), end_at: iso(end) });
+    } else if (d.slot && !d.moved) {
       // A click (no movement) on a card opens it.
-      if (drag.kind === "move") onOpen(drag.slot);
-    } else if (drag.slot) {
-      const { start, end } = displayRange(drag.slot);
-      if (drag.kind === "resize-end") onChange(drag.slot, { end_at: iso(end) });
-      else if (drag.kind === "resize-start") onChange(drag.slot, { start_at: iso(start) });
-      else onChange(drag.slot, { start_at: iso(start), end_at: iso(end) });
+      if (d.kind === "move") open(d.slot);
+    } else if (d.slot) {
+      const { start, end } = displayRange(d.slot, stripFrom, d);
+      if (d.kind === "resize-end") change(d.slot, { end_at: iso(end) });
+      else if (d.kind === "resize-start") change(d.slot, { start_at: iso(start) });
+      else change(d.slot, { start_at: iso(start), end_at: iso(end) });
     }
-  };
+  }, [setDrag]);
+
+  const onPointerCancel = useCallback(() => setDrag(null), [setDrag]);
 
   /** "Book" on a lane label books an hour at the leading edge of what you're looking at. */
-  const book = (printer: Printer) => {
+  const book = useCallback((printer: Printer) => {
     const el = scrollerRef.current;
-    const viewMinute = el ? xToMinute(vertical ? el.scrollTop : el.scrollLeft) : 0;
-    const start = Math.min(Math.max(snapMinutes(viewMinute, "ceil"), liveLo), liveHi - 5);
-    onCreate({
+    const { vertical: v, liveLo: lo, liveHi: hi, stripFrom, onCreate: create } = live.current;
+    const viewMinute = el ? xToMinute(v ? el.scrollTop : el.scrollLeft) : 0;
+    const start = Math.min(Math.max(snapMinutes(viewMinute, "ceil"), lo), hi - 5);
+    create({
       printer,
-      start_at: isoFromMs(Date.parse(strip.from) + start * 60_000),
-      end_at: isoFromMs(Date.parse(strip.from) + Math.min(start + 60, liveHi) * 60_000),
+      start_at: isoFromMs(Date.parse(stripFrom) + start * 60_000),
+      end_at: isoFromMs(Date.parse(stripFrom) + Math.min(start + 60, hi) * 60_000),
     });
-  };
+  }, []);
 
-  // Geometry helpers: `along` is the time axis, `across` the other one.
-  const along = (px: number) => (vertical ? { top: px } : { left: px });
-  const span = (from: number, to: number) =>
-    vertical ? { top: from, height: to - from } : { left: from, width: to - from };
-  const hatch = (from: number, to: number, key: string) =>
-    to > from ? (
-      <div
-        key={key}
-        className="hatched pointer-events-none absolute opacity-70"
-        style={{ ...(vertical ? { insetInline: 0 } : { insetBlock: 0 }), ...span(from, to) }}
-        aria-hidden="true"
-        data-testid={`hatch-${key}`}
-      />
-    ) : null;
+  const setLaneRef = useCallback((printerId: number, el: HTMLDivElement | null) => {
+    if (el) laneRefs.current.set(printerId, el);
+    else laneRefs.current.delete(printerId);
+  }, []);
 
-  const renderLaneBody = (printer: Printer) => {
-    const laneSlots = slots.filter((s) => s.printers.some((p) => p.id === printer.id));
-    const preview =
-      drag && drag.printer.id === printer.id && drag.kind === "create"
-        ? { start: Math.min(drag.anchor, drag.current), end: Math.max(drag.anchor, drag.current) }
-        : null;
-    return (
-      <div
-        ref={(el) => {
-          if (el) laneRefs.current.set(printer.id, el);
-          else laneRefs.current.delete(printer.id);
-        }}
-        className={`relative ${printer.invisible ? "" : "cursor-crosshair"}`}
-        style={{
-          ...(vertical ? { height: length } : { width: length }),
-          // Hour lines as one gradient: the strip starts on an hour and hours are 60 real minutes
-          // even on DST days, so a repeating pattern is exact and costs no DOM.
-          backgroundImage: `repeating-linear-gradient(${
-            vertical ? "to bottom" : "to right"
-          }, var(--line) 0 1px, transparent 1px ${HOUR_PX}px)`,
-          // Phones scroll the vertical timeline by touch; a plain tap still books. Mouse drags
-          // work in both orientations.
-          touchAction: vertical ? "pan-y" : "none",
-        }}
-        onPointerDown={onLanePointerDown(printer)}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => setDrag(null)}
-        data-testid="lane-track"
-      >
-        {/* hatched: the past and beyond the horizon, or the whole lane for invisible printers */}
-        {printer.invisible
-          ? hatch(0, length, "all")
-          : [
-              hatch(0, minuteToX(nowMinute), "past"),
-              hatch(minuteToX(horizonMinute), length, "horizon"),
-            ]}
-        {days.slice(1).map((d) => (
-          <div
-            key={d.date}
-            className={`pointer-events-none absolute border-line-strong ${
-              vertical ? "inset-x-0 border-t" : "inset-y-0 border-l"
-            }`}
-            style={along(minuteToX(d.minute))}
-            aria-hidden="true"
-          />
-        ))}
-        {laneSlots.map((slot) => {
-          const range = displayRange(slot);
-          const start = Math.max(range.start, 0);
-          const end = Math.min(range.end, strip.minutes);
-          const editable = canEditSlot(me.data, slot);
-          const running = slotIsRunning(slot, now);
-          // A running slot's start is locked (dev doc §3.3), so it can neither move nor grow left.
-          const movable = editable && !running;
-          const startPx = minuteToX(start);
-          const endPx = minuteToX(end);
-          const handleClass = `absolute opacity-0 hover:opacity-100 focus:opacity-100 ${
-            vertical ? "inset-x-1 h-2 cursor-ns-resize" : "inset-y-1 w-2 cursor-ew-resize"
-          }`;
-          const handleEvents = {
-            onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => {
-              e.stopPropagation();
-              onPointerMove(e);
-            },
-            onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
-              e.stopPropagation();
-              onPointerUp();
-            },
-          };
-          return (
-            <div key={slot.id} className="contents">
-              <SlotCard
-                slot={slot}
-                editable={editable}
-                running={running}
-                movable={movable}
-                onOpen={onOpen}
-                offset={startPx}
-                length={endPx - startPx}
-                vertical={vertical}
-                onPointerDown={movable ? onCardPointerDown(printer, slot) : undefined}
-                onPointerMove={movable ? handleEvents.onPointerMove : undefined}
-                onPointerUp={movable ? handleEvents.onPointerUp : undefined}
-                dragging={drag?.kind === "move" && drag.slot?.id === slot.id && drag.moved}
-              />
-              {movable ? (
-                <button
-                  type="button"
-                  className={`${handleClass} ${vertical ? "rounded-t-md" : "rounded-l-md"}`}
-                  style={{
-                    ...along(startPx),
-                    backgroundColor: slot.user.color,
-                    touchAction: "none",
-                  }}
-                  onPointerDown={onHandlePointerDown(printer, slot, "start")}
-                  {...handleEvents}
-                  aria-label={`Drag to change the start of ${slot.name}`}
-                  title="Drag to change the start time"
-                  data-testid="resize-start-handle"
-                  data-geometry="time"
-                />
-              ) : null}
-              {editable ? (
-                <button
-                  type="button"
-                  className={`${handleClass} ${vertical ? "rounded-b-md" : "rounded-r-md"}`}
-                  style={{
-                    ...along(endPx - 8),
-                    backgroundColor: slot.user.color,
-                    touchAction: "none",
-                  }}
-                  onPointerDown={onHandlePointerDown(printer, slot, "end")}
-                  {...handleEvents}
-                  aria-label={`Drag to change the end of ${slot.name}`}
-                  title="Drag to change the end time"
-                  data-testid="resize-handle"
-                  data-geometry="time"
-                />
-              ) : null}
-            </div>
-          );
-        })}
-        {preview ? (
-          <div
-            className={`pointer-events-none absolute rounded-lg border-2 border-accent border-dashed bg-accent-soft/60 ${
-              vertical ? "inset-x-1" : "inset-y-1"
-            }`}
-            style={{
-              ...span(minuteToX(preview.start), minuteToX(preview.end)),
-              ...(vertical
-                ? { height: Math.max(minuteToX(preview.end - preview.start), 2) }
-                : { width: Math.max(minuteToX(preview.end - preview.start), 2) }),
-            }}
-            aria-hidden="true"
-          />
-        ) : null}
-        <div
-          className={`pointer-events-none absolute bg-danger ${
-            vertical ? "inset-x-0 h-0.5" : "inset-y-0 w-0.5"
-          }`}
-          style={along(minuteToX(nowMinute))}
-          aria-hidden="true"
-          data-testid="now-line"
-          title={formatTime(isoFromMs(now), tz, fmt)}
-        />
-      </div>
-    );
-  };
+  // Slots per printer, recomputed only when the slot list changes.
+  const slotsByPrinter = useMemo(() => {
+    const map = new Map<number, Slot[]>();
+    for (const slot of slots) {
+      for (const p of slot.printers) {
+        const list = map.get(p.id) ?? [];
+        list.push(slot);
+        map.set(p.id, list);
+      }
+    }
+    return map;
+  }, [slots]);
+  const EMPTY: Slot[] = useMemo(() => [], []);
+
+  const laneProps = (printer: Printer) => ({
+    printer,
+    slots: slotsByPrinter.get(printer.id) ?? EMPTY,
+    window: viewWindow,
+    // Only the lane being dragged sees the drag, so the others keep their memoised render.
+    drag: drag && drag.printer.id === printer.id ? drag : null,
+    stripFrom: strip.from,
+    stripMinutes: strip.minutes,
+    length,
+    nowMinute,
+    horizonMinute,
+    now,
+    nowLabel: formatTime(isoFromMs(now), tz, fmt),
+    days,
+    vertical,
+    me: me.data ?? null,
+    setLaneRef,
+    onLanePointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+    onCardPointerDown,
+    onHandlePointerDown,
+    onOpen,
+  });
 
   /** A tick label; at midnight it becomes the date marker instead of "12 AM". */
   const tickLabel = (t: Tick) => {
@@ -499,13 +496,13 @@ export function Timeline({
         >
           {/* header row: corner + one column per printer */}
           <div
-            className="glass-strong bg-(--glass-solid) sticky top-0 left-0 z-[2] border-line border-x-0 border-t-0 border-b shadow-none"
+            className="glass-strong sticky top-0 left-0 z-[2] border-line border-x-0 border-t-0 border-b bg-(--glass-solid) shadow-none"
             style={{ height: COLUMN_HEADER }}
           />
           {printers.map((printer) => (
             <div
               key={printer.id}
-              className="glass-strong bg-(--glass-solid) sticky top-0 z-[1] flex flex-col justify-center border-line border-x-0 border-t-0 border-b text-center shadow-none"
+              className="glass-strong sticky top-0 z-[1] flex flex-col justify-center border-line border-x-0 border-t-0 border-b bg-(--glass-solid) text-center shadow-none"
               style={{ height: COLUMN_HEADER }}
               data-testid="lane"
               data-printer-id={printer.id}
@@ -515,7 +512,7 @@ export function Timeline({
           ))}
           {/* body row: tick gutter + one lane per printer */}
           <div
-            className="glass-strong bg-(--glass-solid) sticky left-0 z-[1] border-line border-y-0 border-l-0 border-r shadow-none"
+            className="glass-strong sticky left-0 z-[1] border-line border-y-0 border-r border-l-0 bg-(--glass-solid) shadow-none"
             style={{ height: length }}
           >
             {ticks.map((t) => (
@@ -542,7 +539,7 @@ export function Timeline({
               data-testid="lane-body"
               data-printer-id={printer.id}
             >
-              {renderLaneBody(printer)}
+              <LaneBody {...laneProps(printer)} />
             </div>
           ))}
         </div>
@@ -562,7 +559,7 @@ export function Timeline({
         {/* ticks */}
         <div className="flex border-line border-b text-xs" style={{ height: 28 }}>
           <div
-            className="glass-strong bg-(--glass-solid) sticky left-0 z-[2] shrink-0 border-line border-y-0 border-l-0 border-r shadow-none"
+            className="glass-strong sticky left-0 z-[2] shrink-0 border-line border-y-0 border-r border-l-0 bg-(--glass-solid) shadow-none"
             style={{ width: LABEL_WIDTH }}
           />
           <div className="relative" style={{ width: length }}>
@@ -592,18 +589,243 @@ export function Timeline({
             data-printer-id={printer.id}
           >
             <div
-              className="glass-strong bg-(--glass-solid) sticky left-0 z-[2] flex shrink-0 flex-col justify-center border-line border-y-0 border-l-0 border-r shadow-none"
+              className="glass-strong sticky left-0 z-[2] flex shrink-0 flex-col justify-center border-line border-y-0 border-r border-l-0 bg-(--glass-solid) shadow-none"
               style={{ width: LABEL_WIDTH }}
             >
               <LaneLabel printer={printer} onBook={book} />
             </div>
-            {renderLaneBody(printer)}
+            <LaneBody {...laneProps(printer)} />
           </div>
         ))}
       </div>
     </div>
   );
+});
+
+interface LaneBodyProps {
+  printer: Printer;
+  slots: Slot[];
+  window: ViewWindow | null;
+  drag: DragState | null;
+  stripFrom: string;
+  stripMinutes: number;
+  length: number;
+  nowMinute: number;
+  horizonMinute: number;
+  now: number;
+  nowLabel: string;
+  days: RangeDay[];
+  vertical: boolean;
+  me: Me | null;
+  setLaneRef: (printerId: number, el: HTMLDivElement | null) => void;
+  onLanePointerDown: (printer: Printer, e: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerMove: (e: ReactPointerEvent<HTMLElement>) => void;
+  onPointerUp: () => void;
+  onPointerCancel: () => void;
+  onCardPointerDown: (
+    printer: Printer,
+    slot: Slot,
+    e: ReactPointerEvent<HTMLButtonElement>,
+  ) => void;
+  onHandlePointerDown: (
+    printer: Printer,
+    slot: Slot,
+    edge: "start" | "end",
+    e: ReactPointerEvent<HTMLButtonElement>,
+  ) => void;
+  onOpen: (slot: Slot) => void;
 }
+
+/** One printer's lane: hatching, day lines, cards with handles, the create preview, the now line. */
+const LaneBody = memo(function LaneBody({
+  printer,
+  slots,
+  window,
+  drag,
+  stripFrom,
+  stripMinutes,
+  length,
+  nowMinute,
+  horizonMinute,
+  now,
+  nowLabel,
+  days,
+  vertical,
+  me,
+  setLaneRef,
+  onLanePointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  onCardPointerDown,
+  onHandlePointerDown,
+  onOpen,
+}: LaneBodyProps) {
+  // Geometry helpers: `along` is the time axis, `across` the other one.
+  const along = (px: number) => (vertical ? { top: px } : { left: px });
+  const span = (from: number, to: number) =>
+    vertical ? { top: from, height: to - from } : { left: from, width: to - from };
+  const hatch = (from: number, to: number, key: string) =>
+    to > from ? (
+      <div
+        key={key}
+        className="hatched pointer-events-none absolute opacity-70"
+        style={{ ...(vertical ? { insetInline: 0 } : { insetBlock: 0 }), ...span(from, to) }}
+        aria-hidden="true"
+        data-testid={`hatch-${key}`}
+      />
+    ) : null;
+  const preview =
+    drag && drag.kind === "create"
+      ? { start: Math.min(drag.anchor, drag.current), end: Math.max(drag.anchor, drag.current) }
+      : null;
+  const handleEvents = {
+    onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      onPointerMove(e);
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      onPointerUp();
+    },
+  };
+  const handleClass = `absolute opacity-0 hover:opacity-100 focus:opacity-100 ${
+    vertical ? "inset-x-1 h-2 cursor-ns-resize" : "inset-y-1 w-2 cursor-ew-resize"
+  }`;
+  // Cards outside the window (plus the one being dragged, wherever it is) stay unmounted.
+  const visible = useMemo(() => {
+    if (!window) return [];
+    const fromMs = Date.parse(stripFrom) + window.from * 60_000;
+    const toMs = Date.parse(stripFrom) + window.to * 60_000;
+    return slots.filter(
+      (s) =>
+        s.id === drag?.slot?.id || (Date.parse(s.start_at) < toMs && Date.parse(s.end_at) > fromMs),
+    );
+  }, [slots, window, stripFrom, drag?.slot?.id]);
+
+  return (
+    <div
+      ref={(el) => setLaneRef(printer.id, el)}
+      className={`relative ${printer.invisible ? "" : "cursor-crosshair"}`}
+      style={{
+        ...(vertical ? { height: length } : { width: length }),
+        // Hour lines as one gradient: the strip starts on an hour and hours are 60 real minutes
+        // even on DST days, so a repeating pattern is exact and costs no DOM.
+        backgroundImage: `repeating-linear-gradient(${
+          vertical ? "to bottom" : "to right"
+        }, var(--line) 0 1px, transparent 1px ${HOUR_PX}px)`,
+        // Phones scroll the vertical timeline by touch; a plain tap still books. Mouse drags
+        // work in both orientations.
+        touchAction: vertical ? "pan-y" : "none",
+      }}
+      onPointerDown={(e) => onLanePointerDown(printer, e)}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      data-testid="lane-track"
+    >
+      {/* hatched: the past and beyond the horizon, or the whole lane for invisible printers */}
+      {printer.invisible
+        ? hatch(0, length, "all")
+        : [
+            hatch(0, minuteToX(nowMinute), "past"),
+            hatch(minuteToX(horizonMinute), length, "horizon"),
+          ]}
+      {days.slice(1).map((d) => (
+        <div
+          key={d.date}
+          className={`pointer-events-none absolute border-line-strong ${
+            vertical ? "inset-x-0 border-t" : "inset-y-0 border-l"
+          }`}
+          style={along(minuteToX(d.minute))}
+          aria-hidden="true"
+        />
+      ))}
+      {visible.map((slot) => {
+        const range = displayRange(slot, stripFrom, drag);
+        const start = Math.max(range.start, 0);
+        const end = Math.min(range.end, stripMinutes);
+        const editable = canEditSlot(me, slot);
+        const running = slotIsRunning(slot, now);
+        // A running slot's start is locked (dev doc §3.3), so it can neither move nor grow left.
+        const movable = editable && !running;
+        const startPx = minuteToX(start);
+        const endPx = minuteToX(end);
+        return (
+          <div key={slot.id} className="contents">
+            <SlotCard
+              slot={slot}
+              editable={editable}
+              running={running}
+              movable={movable}
+              onOpen={onOpen}
+              offset={startPx}
+              length={endPx - startPx}
+              vertical={vertical}
+              onPointerDown={movable ? (e) => onCardPointerDown(printer, slot, e) : undefined}
+              onPointerMove={movable ? handleEvents.onPointerMove : undefined}
+              onPointerUp={movable ? handleEvents.onPointerUp : undefined}
+              dragging={drag?.kind === "move" && drag.slot?.id === slot.id && drag.moved}
+            />
+            {movable ? (
+              <button
+                type="button"
+                className={`${handleClass} ${vertical ? "rounded-t-md" : "rounded-l-md"}`}
+                style={{ ...along(startPx), backgroundColor: slot.user.color, touchAction: "none" }}
+                onPointerDown={(e) => onHandlePointerDown(printer, slot, "start", e)}
+                {...handleEvents}
+                aria-label={`Drag to change the start of ${slot.name}`}
+                title="Drag to change the start time"
+                data-testid="resize-start-handle"
+                data-geometry="time"
+              />
+            ) : null}
+            {editable ? (
+              <button
+                type="button"
+                className={`${handleClass} ${vertical ? "rounded-b-md" : "rounded-r-md"}`}
+                style={{
+                  ...along(endPx - 8),
+                  backgroundColor: slot.user.color,
+                  touchAction: "none",
+                }}
+                onPointerDown={(e) => onHandlePointerDown(printer, slot, "end", e)}
+                {...handleEvents}
+                aria-label={`Drag to change the end of ${slot.name}`}
+                title="Drag to change the end time"
+                data-testid="resize-handle"
+                data-geometry="time"
+              />
+            ) : null}
+          </div>
+        );
+      })}
+      {preview ? (
+        <div
+          className={`pointer-events-none absolute rounded-lg border-2 border-accent border-dashed bg-accent-soft/60 ${
+            vertical ? "inset-x-1" : "inset-y-1"
+          }`}
+          style={{
+            ...span(minuteToX(preview.start), minuteToX(preview.end)),
+            ...(vertical
+              ? { height: Math.max(minuteToX(preview.end - preview.start), 2) }
+              : { width: Math.max(minuteToX(preview.end - preview.start), 2) }),
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
+      <div
+        className={`pointer-events-none absolute bg-danger ${
+          vertical ? "inset-x-0 h-0.5" : "inset-y-0 w-0.5"
+        }`}
+        style={along(minuteToX(nowMinute))}
+        aria-hidden="true"
+        data-testid="now-line"
+        title={nowLabel}
+      />
+    </div>
+  );
+});
 
 /**
  * The printer name cell. For bookable printers the whole cell is the keyboard/touch "Book" control

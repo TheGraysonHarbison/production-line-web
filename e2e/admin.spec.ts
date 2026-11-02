@@ -253,3 +253,23 @@ test("images: enable, upload a PNG and a RAW onto a slot, set an avatar, then di
   await expect(dialog.getByTestId("image-card")).toHaveCount(1);
   await expect(page.getByTestId("avatar-upload")).toHaveCount(0);
 });
+
+test("admin downloads a database backup from the Backup tab", async ({ page }) => {
+  await signInAsOwner(page);
+  await page.goto("/settings/backup");
+  await expect(page.getByRole("note")).toContainText(/images are not included/i);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId("download-backup").click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^production-line-\d{8}-\d{4}\.db$/);
+  const stream = await download.createReadStream();
+  const head = await new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on("data", (c: Buffer) => chunks.push(c));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", reject);
+  });
+  expect(head.subarray(0, 16).toString("latin1")).toBe("SQLite format 3\0");
+  expect(head.length).toBeGreaterThan(4096);
+});
