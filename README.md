@@ -51,7 +51,7 @@ Needs Node 26 or newer on the `PATH` (see <https://nodejs.org/en/download>); the
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/TheGraysonHarbison/production-line-web/main/scripts/install-standalone.sh
 sudo bash install-standalone.sh                      # latest release
-sudo bash install-standalone.sh --version v1.0.0-rc.1
+sudo bash install-standalone.sh --version v1.0.0-rc.2
 sudo bash install-standalone.sh --from-source        # from inside a git checkout
 ```
 

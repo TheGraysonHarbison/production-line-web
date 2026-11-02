@@ -8,9 +8,14 @@ All notable changes to Production Line Web. The format follows [Keep a Changelog
 - Documentation for hobbyist installs: screenshots, reverse-proxy note, troubleshooting, a Home Assistant guide, and this changelog.
 - The Playwright suite also runs against the built container image in CI.
 
+## [1.0.0-rc.2] – 2026-11-02
+
+### Fixed
+- Images are published under the repository owner's namespace, `ghcr.io/thegraysonharbison/production-line-web`; the `goblinfoddergames` namespace named in the original spec does not exist, which is why `v1.0.0-rc.1` never published.
+
 ## [1.0.0-rc.1] – 2026-11-02
 
-First release candidate. Everything below is new.
+First release candidate (tagged, but its image push was refused; see rc.2). Everything below is new.
 
 ### Added
 - **Accounts.** First-boot Owner setup, self-registration (admin can turn it off), roles (Owner / Admin / User), server-side sessions with a signed cookie, password change, profile colour, profile image, 12/24-hour preference.
@@ -25,5 +30,6 @@ First release candidate. Everything below is new.
 - **Hardening.** Helmet with a strict CSP, CSRF origin checks, rate limits, scrypt passwords, encrypted HA token, route-coverage test, SQL interpolation lint gate, a security review document.
 - **Packaging.** Multi-arch container image (amd64, arm64) on GHCR, Docker Compose and Podman Quadlet installers, a standalone installer with a hardened systemd unit and a release tarball, uninstallers, an upgrade test in CI.
 
-[Unreleased]: https://github.com/TheGraysonHarbison/production-line-web/compare/v1.0.0-rc.1...HEAD
+[Unreleased]: https://github.com/TheGraysonHarbison/production-line-web/compare/v1.0.0-rc.2...HEAD
+[1.0.0-rc.2]: https://github.com/TheGraysonHarbison/production-line-web/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/TheGraysonHarbison/production-line-web/releases/tag/v1.0.0-rc.1
