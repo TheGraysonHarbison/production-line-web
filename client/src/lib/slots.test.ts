@@ -6,6 +6,7 @@ import {
   findConflicts,
   nextSlotStart,
   printerAvailability,
+  upcomingSlots,
 } from "./slots.ts";
 
 const user = (id: number, role: "owner" | "admin" | "user" = "user") => ({
@@ -76,12 +77,32 @@ describe("slot helpers", () => {
     expect(printerAvailability(printer(1), slots, Date.parse(T(10, 30)))).toMatchObject({
       state: "busy_until",
       at: T(11),
+      by: { username: "u1" },
+      slot: { id: 1, name: "S1" },
     });
     expect(printerAvailability(printer(1), slots, Date.parse(T(11, 30)))).toMatchObject({
       state: "free_until",
       at: T(12),
+      by: { username: "u2" },
+      slot: { id: 2, name: "S2" },
     });
     expect(printerAvailability(printer(1), slots, Date.parse(T(14)))).toEqual({ state: "free" });
     expect(printerAvailability(printer(3, true), slots)).toEqual({ state: "invisible" });
+  });
+
+  it("upcomingSlots lists only slots that have not started, soonest first, capped", () => {
+    const many = [
+      slot(9, 1, T(9), T(9, 30), [1]), // running at 09:10
+      slot(5, 1, T(15), T(16), [1]),
+      slot(3, 2, T(12), T(13), [2]),
+      slot(4, 2, T(12), T(13), [3]), // same start: ordered by id
+      slot(6, 1, T(17), T(18), [1]),
+      slot(7, 1, T(18), T(19), [1]),
+      slot(8, 1, T(19), T(20), [1]),
+    ];
+    const at = Date.parse(T(9, 10));
+    expect(upcomingSlots(many, at).map((s) => s.id)).toEqual([3, 4, 5, 6, 7]);
+    expect(upcomingSlots(many, at, 2).map((s) => s.id)).toEqual([3, 4]);
+    expect(upcomingSlots(many, Date.parse(T(20)))).toEqual([]);
   });
 });

@@ -65,11 +65,31 @@ export function PrinterList({
                 <div className="text-ink-muted text-xs" data-testid="printer-availability">
                   {a.state === "free" && "Free today"}
                   {a.state === "invisible" && "Not bookable"}
-                  {a.state === "busy_until" &&
-                    `Busy until ${formatTime(a.at, tz, fmt)} · ${a.by.username}`}
-                  {a.state === "free_until" &&
-                    `Free until ${formatTime(a.at, tz, fmt)} · ${a.by.username}`}
+                  {a.state === "busy_until" && `Busy until ${formatTime(a.at, tz, fmt)}`}
+                  {a.state === "free_until" && `Free until ${formatTime(a.at, tz, fmt)}`}
                 </div>
+                {a.state === "busy_until" || a.state === "free_until" ? (
+                  <button
+                    type="button"
+                    className="flex max-w-full items-center gap-1.5 truncate rounded text-left text-xs hover:text-accent"
+                    onClick={() => editor.openEdit(a.slot)}
+                    title={`${a.state === "busy_until" ? "Printing now" : "Next up"}: ${a.slot.name} · ${a.by.username}`}
+                    data-testid="printer-occupant"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: a.by.color }}
+                    />
+                    <span className="truncate">
+                      <span className="sr-only">
+                        {a.state === "busy_until" ? "Printing now: " : "Next up: "}
+                      </span>
+                      <span className="font-medium text-ink">{a.slot.name}</span>
+                      <span className="text-ink-muted"> · {a.by.username}</span>
+                    </span>
+                  </button>
+                ) : null}
               </div>
               {bookable && !p.invisible ? (
                 <button

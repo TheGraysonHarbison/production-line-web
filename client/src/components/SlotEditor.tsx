@@ -25,6 +25,7 @@ import {
 import { CloseIcon } from "./Icons.tsx";
 import { errorNoticeClass } from "./Notice.tsx";
 import { SlotImages } from "./SlotImages.tsx";
+import { TimeSelect } from "./TimeSelect.tsx";
 
 const ERROR_TEXT: Record<string, string> = {
   slot_in_past: "The start time is in the past.",
@@ -222,7 +223,7 @@ function EditorForm({ sheet }: { sheet: boolean }) {
         />
       </Field>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3">
         <Field
           label="Start"
           htmlFor="slot-start-date"
@@ -238,13 +239,11 @@ function EditorForm({ sheet }: { sheet: boolean }) {
               disabled={readOnly || running}
               required
             />
-            <input
-              aria-label="Start time"
-              type="time"
-              step={300}
-              className={`${inputClass} min-w-0 flex-1`}
+            <TimeSelect
+              label="Start time"
               value={start.time}
-              onChange={(e) => setStart({ ...start, time: e.target.value })}
+              onChange={(time) => setStart({ ...start, time })}
+              fmt={fmt}
               disabled={readOnly || running}
               required
             />
@@ -266,13 +265,11 @@ function EditorForm({ sheet }: { sheet: boolean }) {
               disabled={readOnly}
               required
             />
-            <input
-              aria-label="End time"
-              type="time"
-              step={300}
-              className={`${inputClass} min-w-0 flex-1`}
+            <TimeSelect
+              label="End time"
               value={end.time}
-              onChange={(e) => setEnd({ ...end, time: e.target.value })}
+              onChange={(time) => setEnd({ ...end, time })}
+              fmt={fmt}
               disabled={readOnly}
               required
             />
