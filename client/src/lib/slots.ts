@@ -57,8 +57,8 @@ export function slotIsRunning(slot: Slot, now: number = Date.now()): boolean {
 
 export type Availability =
   | { state: "free" }
-  | { state: "free_until"; at: string; by: PublicUser }
-  | { state: "busy_until"; at: string; by: PublicUser }
+  | { state: "free_until"; at: string; by: PublicUser; slot: Slot }
+  | { state: "busy_until"; at: string; by: PublicUser; slot: Slot }
   | { state: "invisible" };
 
 /** Dock summary per printer for the loaded range, relative to `now`. */
@@ -73,8 +73,16 @@ export function printerAvailability(
     .sort((a, b) => a.start_at.localeCompare(b.start_at));
   const nowIso = new Date(now).toISOString();
   const running = mine.find((s) => isRunning(s, nowIso));
-  if (running) return { state: "busy_until", at: running.end_at, by: running.user };
+  if (running) return { state: "busy_until", at: running.end_at, by: running.user, slot: running };
   const next = mine.find((s) => Date.parse(s.start_at) > now);
-  if (next) return { state: "free_until", at: next.start_at, by: next.user };
+  if (next) return { state: "free_until", at: next.start_at, by: next.user, slot: next };
   return { state: "free" };
+}
+
+/** The next `limit` slots that have not started yet, soonest first (the dock's Upcoming list). */
+export function upcomingSlots(slots: Slot[], now: number = Date.now(), limit = 5): Slot[] {
+  return slots
+    .filter((s) => Date.parse(s.start_at) > now)
+    .sort((a, b) => a.start_at.localeCompare(b.start_at) || a.id - b.id)
+    .slice(0, limit);
 }

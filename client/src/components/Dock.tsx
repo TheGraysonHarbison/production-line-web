@@ -14,6 +14,7 @@ import {
   TodayIcon,
 } from "./Icons.tsx";
 import { PrinterList } from "./PrinterList.tsx";
+import { UpcomingList } from "./UpcomingList.tsx";
 
 export function StreamDot({ withLabel = true }: { withLabel?: boolean }) {
   const status = useStreamStatus();
@@ -83,13 +84,14 @@ export function Dock() {
         >
           <PlusIcon /> New slot
         </button>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) => `${navItem} ${isActive ? navActive : ""}`}
-        >
-          <SettingsIcon /> Settings
-        </NavLink>
       </nav>
+
+      <section className="shrink-0">
+        <h2 className="mb-1 font-medium text-ink-muted text-xs uppercase tracking-wide">
+          Upcoming
+        </h2>
+        <UpcomingList />
+      </section>
 
       <section className="min-h-0 flex-1 overflow-y-auto">
         <h2 className="mb-2 font-medium text-ink-muted text-xs uppercase tracking-wide">
@@ -98,7 +100,16 @@ export function Dock() {
         <PrinterList />
       </section>
 
-      <div className="flex items-center gap-3 border-line border-t pt-3">
+      <nav aria-label="Account" className="flex flex-col gap-1 border-line border-t pt-3">
+        <NavLink
+          to="/settings"
+          className={({ isActive }) => `${navItem} ${isActive ? navActive : ""}`}
+        >
+          <SettingsIcon /> Settings
+        </NavLink>
+      </nav>
+
+      <div className="flex items-center gap-3">
         <Avatar user={user} size={32} />
         <span className="truncate text-sm" data-testid="current-username">
           {user.username}

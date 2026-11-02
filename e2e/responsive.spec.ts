@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { expectTime, setTime } from "./editor-helpers.js";
 
 const suffix = () => Math.random().toString(36).slice(2, 8);
 
@@ -158,9 +159,9 @@ test.describe("touch layouts", () => {
     const name = `Sheet-${suffix()}`;
     await dialog.getByLabel("Name").fill(name);
     await dialog.getByLabel("Start", { exact: true }).fill(date);
-    await dialog.getByLabel("Start time").fill("09:00");
+    await setTime(dialog, "Start time", "09:00");
     await dialog.getByLabel("End", { exact: true }).fill(date);
-    await dialog.getByLabel("End time").fill("10:00");
+    await setTime(dialog, "End time", "10:00");
     await dialog.getByLabel(printer.name).check();
     await dialog.getByRole("button", { name: "Create slot" }).click();
     await expect(dialog).toBeHidden();
@@ -173,7 +174,7 @@ test.describe("touch layouts", () => {
     await expect(card).toBeVisible();
     await card.click();
     await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
-    await expect(dialog.getByLabel("Start time")).toHaveValue("09:00");
+    await expectTime(dialog, "Start time", "09:00");
     await dialog.getByLabel("Name").fill(`${name}-v2`);
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog).toBeHidden();
@@ -194,8 +195,8 @@ test.describe("touch layouts", () => {
     // 3px past the tick is ~2 minutes, which floor-snaps to the hour.
     await page.touchscreen.tap(trackBox.x + trackBox.width / 2, trackBox.y + tickTop + 3);
     await expect(dialog.getByRole("heading", { name: "New slot" })).toBeVisible();
-    await expect(dialog.getByLabel("Start time")).toHaveValue("03:00");
-    await expect(dialog.getByLabel("End time")).toHaveValue("04:00");
+    await expectTime(dialog, "Start time", "03:00");
+    await expectTime(dialog, "End time", "04:00");
     await expect(dialog.getByLabel(printer.name)).toBeChecked();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { expectTime, readTime, setTime } from "./editor-helpers.js";
 
 const suffix = () => Math.random().toString(36).slice(2, 8);
 const PX_PER_MINUTE = 1.25;
@@ -150,8 +151,8 @@ test.describe("desktop scheduling", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "New slot" })).toBeVisible();
-    await expect(dialog.getByLabel("Start time")).toHaveValue("06:00");
-    await expect(dialog.getByLabel("End time")).toHaveValue("08:00");
+    await expectTime(dialog, "Start time", "06:00");
+    await expectTime(dialog, "End time", "08:00");
     await expect(dialog.getByLabel(printer.name)).toBeChecked();
     const slotName = `Benchy-${suffix()}`;
     await dialog.getByLabel("Name").fill(slotName);
@@ -180,8 +181,8 @@ test.describe("desktop scheduling", () => {
     await page.getByRole("button", { name: `Book ${printer.name}` }).click();
     await expect(dialog.getByRole("heading", { name: "New slot" })).toBeVisible();
     await dialog.getByLabel("Name").fill("Clash");
-    await dialog.getByLabel("Start time").fill("09:00");
-    await dialog.getByLabel("End time").fill("10:00");
+    await setTime(dialog, "Start time", "09:00");
+    await setTime(dialog, "End time", "10:00");
     const meta = await (await page.request.get("/api/meta")).json();
     const toIso = (time: string) => {
       // Build the instant for `date time` in the app timezone via the browser's Intl.
@@ -253,7 +254,7 @@ test.describe("desktop scheduling", () => {
       .filter({ hasText: `${slotName}-v2` })
       .first()
       .click();
-    await expect(dialog.getByLabel("End time")).toHaveValue("08:30");
+    await expectTime(dialog, "End time", "08:30");
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
 
@@ -277,8 +278,8 @@ test.describe("desktop scheduling", () => {
       .first();
     await expect.poll(async () => (await ourCard.getAttribute("title")) ?? "").toMatch(/5:30/);
     await ourCard.click();
-    await expect(dialog.getByLabel("Start time")).toHaveValue("05:30");
-    await expect(dialog.getByLabel("End time")).toHaveValue("08:30");
+    await expectTime(dialog, "Start time", "05:30");
+    await expectTime(dialog, "End time", "08:30");
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
 
@@ -296,8 +297,8 @@ test.describe("desktop scheduling", () => {
     await expect.poll(async () => (await ourCard.getAttribute("title")) ?? "").toMatch(/5:00 AM/);
     await ourCard.click();
     await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
-    await expect(dialog.getByLabel("Start time")).toHaveValue("05:00");
-    await expect(dialog.getByLabel("End time")).toHaveValue("08:00");
+    await expectTime(dialog, "Start time", "05:00");
+    await expectTime(dialog, "End time", "08:00");
 
     // Delete from the editor.
     await dialog.getByRole("button", { name: "Delete" }).click();
@@ -351,11 +352,13 @@ test.describe("desktop scheduling", () => {
     await expect(lane.getByTestId("resize-start-handle")).toHaveCount(0);
     await card.click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByLabel("Start time")).toBeDisabled();
-    const endTime = dialog.getByLabel("End time");
-    const [h, m] = (await endTime.inputValue()).split(":").map(Number);
-    const plus = new Date(Date.UTC(2000, 0, 1, h, m + 30));
-    await endTime.fill(
+    await expect(dialog.getByLabel("Start time hour")).toBeDisabled();
+    await expect(dialog.getByLabel("Start time minute")).toBeDisabled();
+    const [h, m] = (await readTime(dialog, "End time")).split(":").map(Number);
+    const plus = new Date(Date.UTC(2000, 0, 1, h, (m ?? 0) + 30));
+    await setTime(
+      dialog,
+      "End time",
       `${String(plus.getUTCHours()).padStart(2, "0")}:${String(plus.getUTCMinutes()).padStart(2, "0")}`,
     );
     await dialog.getByRole("button", { name: "Save" }).click();
@@ -456,6 +459,127 @@ test.describe("desktop scheduling", () => {
     const b2 = await trackBox(track);
     await page.mouse.click(box.x + nowLeft - 20 * PX_PER_MINUTE, b2.y + b2.height / 2);
     await page.waitForTimeout(300);
+    await expect(dialog).toBeHidden();
+  });
+
+  test("the dock lists upcoming slots, names each printer's occupant, and keeps Settings by the account", async ({
+    page,
+    baseURL,
+  }) => {
+    await signInAsOwner(page);
+    const origin = baseURL as string;
+    const busy = await addPrinter(page, `Ac-busy-${suffix()}`, origin);
+    const idle = await addPrinter(page, `Ad-idle-${suffix()}`, origin);
+    const floorNow = Math.floor(Date.now() / 300_000) * 300_000;
+    const book = async (name: string, printerId: number, startMs: number, minutes: number) => {
+      const res = await page.request.post("/api/slots", {
+        headers: { origin },
+        data: {
+          name,
+          start_at: new Date(startMs).toISOString(),
+          end_at: new Date(startMs + minutes * 60_000).toISOString(),
+          printer_ids: [printerId],
+        },
+      });
+      expect(res.status()).toBe(201);
+    };
+    const tag = suffix();
+    // Running now on the busy printer; two future bookings, the later one on the idle printer.
+    await book(`Now-${tag}`, busy.id, floorNow, 20);
+    await book(`Later-${tag}`, idle.id, floorNow + 5 * 24 * 3_600_000, 60);
+    await book(`Soon-${tag}`, busy.id, floorNow + 2 * 24 * 3_600_000, 60);
+
+    await page.goto("/");
+    const dock = page.locator("aside");
+    // Settings sits in the account block directly above the user row, not in the main nav.
+    await expect(dock.getByRole("navigation", { name: "Main" }).getByText("Settings")).toHaveCount(
+      0,
+    );
+    const account = dock.getByRole("navigation", { name: "Account" });
+    await expect(account.getByRole("link", { name: "Settings" })).toBeVisible();
+    const order = await dock.evaluate((el) => {
+      const pick = (sel: string) => el.querySelector(sel) as HTMLElement | null;
+      const items = [
+        ["new", pick('[data-testid="new-slot"]')],
+        ["upcoming", pick('[data-testid="upcoming-slots"]')],
+        ["printers", pick('[data-testid="dock-printers"]')],
+        ["settings", pick('nav[aria-label="Account"]')],
+        ["user", pick('[data-testid="current-username"]')],
+      ] as const;
+      return items
+        .filter(([, node]) => node)
+        .sort((a, b) => (a[1] as HTMLElement).offsetTop - (b[1] as HTMLElement).offsetTop)
+        .map(([key]) => key);
+    });
+    expect(order).toEqual(["new", "upcoming", "printers", "settings", "user"]);
+
+    // Upcoming: soonest first, the running slot excluded, capped at five.
+    const upcoming = dock.getByTestId("upcoming-slot");
+    await expect(upcoming).not.toContainText([`Now-${tag}`]);
+    const soonIndex = await upcoming
+      .filter({ hasText: `Soon-${tag}` })
+      .evaluate((el) =>
+        Array.from(el.parentElement?.parentElement?.children ?? []).indexOf(
+          el.parentElement as Element,
+        ),
+      );
+    const laterIndex = await upcoming
+      .filter({ hasText: `Later-${tag}` })
+      .evaluate((el) =>
+        Array.from(el.parentElement?.parentElement?.children ?? []).indexOf(
+          el.parentElement as Element,
+        ),
+      );
+    expect(soonIndex).toBeGreaterThanOrEqual(0);
+    expect(laterIndex).toBeGreaterThan(soonIndex);
+    expect(await upcoming.count()).toBeLessThanOrEqual(5);
+    await expect(upcoming.filter({ hasText: `Soon-${tag}` })).toContainText("owner");
+    await expect(upcoming.filter({ hasText: `Soon-${tag}` })).toContainText(busy.name);
+
+    // The busy printer names the slot printing on it and its author; the idle one is free today.
+    const busyRow = dock
+      .getByTestId("dock-printers")
+      .getByText(busy.name, { exact: true })
+      .locator("..");
+    await expect(busyRow.getByTestId("printer-availability")).toContainText("Busy until");
+    await expect(busyRow.getByTestId("printer-occupant")).toContainText(`Now-${tag}`);
+    await expect(busyRow.getByTestId("printer-occupant")).toContainText("owner");
+    const idleRow = dock
+      .getByTestId("dock-printers")
+      .getByText(idle.name, { exact: true })
+      .locator("..");
+    await expect(idleRow.getByTestId("printer-availability")).toHaveText("Free today");
+    await expect(idleRow.getByTestId("printer-occupant")).toHaveCount(0);
+
+    // Both lists open the slot in the editor.
+    await upcoming.filter({ hasText: `Soon-${tag}` }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Edit slot" })).toBeVisible();
+    await expect(dialog.getByLabel("Name")).toHaveValue(`Soon-${tag}`);
+    // Minute options are the twelve 5-minute marks.
+    const minutes = await dialog
+      .getByLabel("Start time minute")
+      .locator("option")
+      .evaluateAll((els) => els.map((o) => (o as HTMLOptionElement).value));
+    expect(minutes).toEqual([
+      "00",
+      "05",
+      "10",
+      "15",
+      "20",
+      "25",
+      "30",
+      "35",
+      "40",
+      "45",
+      "50",
+      "55",
+    ]);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    await busyRow.getByTestId("printer-occupant").click();
+    await expect(dialog.getByLabel("Name")).toHaveValue(`Now-${tag}`);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
   });
 
