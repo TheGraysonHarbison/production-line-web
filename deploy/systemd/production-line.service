@@ -1,0 +1,37 @@
+# Production Line Web — standalone systemd unit (dev doc §15.3).
+# Installed by scripts/install-standalone.sh, which also writes a drop-in pinning the absolute
+# path of the Node ≥ 26 binary it found (systemd's PATH does not include version managers).
+#
+# TZ: leave unset to inherit the host's /etc/localtime for log timestamps; the app's own
+# timezone is chosen in Settings → General. DATA_DIR holds the database, secret key, and images.
+[Unit]
+Description=Production Line Web
+Documentation=https://github.com/TheGraysonHarbison/production-line-web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=plweb
+Group=plweb
+WorkingDirectory=/opt/production-line-web
+Environment=NODE_ENV=production
+Environment=DATA_DIR=/var/lib/production-line
+Environment=PORT=8080
+Environment=HOST=0.0.0.0
+ExecStart=/usr/bin/env node server/dist/index.js
+Restart=on-failure
+RestartSec=3
+UMask=0027
+
+# Hardening: the code tree is read-only to the service; only the data directory is writable.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/production-line
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

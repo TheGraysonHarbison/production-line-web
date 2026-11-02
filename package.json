@@ -17,6 +17,7 @@
     "dev": "npm run build -w packages/shared && concurrently -n shared,server,client -c blue,green,magenta \"npm run dev -w packages/shared\" \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w packages/shared && npm run build -w client && node scripts/copy-client.mjs && npm run build -w server",
     "start": "node server/dist/index.js",
+    "release": "node scripts/release.mjs",
     "pretest": "npm run build -w packages/shared",
     "test": "vitest run --project shared --project server --project client",
     "e2e": "playwright test -c e2e/playwright.config.ts",

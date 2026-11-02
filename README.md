@@ -6,7 +6,53 @@ Self-hosted, LAN-only scheduling for shared 3D printers. Book time slots on one 
 
 ## Requirements
 
-- Node.js 26 or newer
+- Node.js 26 or newer (standalone install), or Docker / Podman (container install)
+
+## Install
+
+Three supported paths. All of them serve the app on port 8080, open `http://<host>:8080/` to create the Owner account on first run. Set `PLW_PORT` before running an installer to use another port. Re-running an installer upgrades in place and keeps your data; the database migrates itself on start.
+
+### Docker Compose
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/TheGraysonHarbison/production-line-web/main/scripts/install-docker.sh
+bash install-docker.sh
+```
+
+Writes `~/production-line-web/compose.yaml` (image `ghcr.io/goblinfoddergames/production-line-web`, data on the `plw-data` volume, `TZ` from the host) and runs `docker compose up -d`. Upgrade: re-run the script. Remove: `docker compose -f ~/production-line-web/compose.yaml down` (add `-v` to delete the data volume).
+
+### Podman (rootless, Quadlet)
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/TheGraysonHarbison/production-line-web/main/scripts/install-podman.sh
+bash install-podman.sh
+```
+
+Installs `~/.config/containers/systemd/production-line.container` as a user service, starts it, and enables lingering so it comes back after a reboot. `AutoUpdate=registry` lets `podman auto-update` (or its timer) pull new images. Upgrade: re-run the script. Remove: `scripts/uninstall-podman.sh` (`--purge` also deletes the `plw-data` volume).
+
+### Standalone (servers, Raspberry Pi 4/5 with a 64-bit OS)
+
+Needs Node 26 or newer on the `PATH` (see <https://nodejs.org/en/download>); the installer never installs Node.
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/TheGraysonHarbison/production-line-web/main/scripts/install-standalone.sh
+sudo bash install-standalone.sh                      # latest release
+sudo bash install-standalone.sh --version v1.0.0-rc.1
+sudo bash install-standalone.sh --from-source        # from inside a git checkout
+```
+
+Creates the `plweb` system user and `/var/lib/production-line` (the data directory, mode 0750), unpacks the release tarball into `/opt/production-line-web`, installs runtime dependencies with `npm ci --omit=dev`, and installs a hardened systemd unit (`ProtectSystem=strict`, only the data directory writable, `PrivateTmp`, `NoNewPrivileges`). Logs: `journalctl -u production-line -f`. Upgrade: re-run the installer. Remove: `sudo scripts/uninstall-standalone.sh`, which keeps `/var/lib/production-line` unless you pass `--purge`.
+
+### Environment
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | Listen port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `DATA_DIR` | `./data` (standalone `/var/lib/production-line`, containers `/data`) | Database, secret key, images |
+| `TZ` | unset | OS timezone for log timestamps; the app's timezone is set in Settings → General |
+| `LOG_LEVEL` | `info` | pino level |
+| `TRUST_PROXY` | `0` | Set `1` behind a reverse proxy |
 
 ## Development
 

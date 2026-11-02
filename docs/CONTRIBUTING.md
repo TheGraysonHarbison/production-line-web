@@ -32,6 +32,14 @@ podman run --rm -p 8080:8080 -v plw-data:/data production-line-web:dev
 
 On a host where `localhost` resolves to IPv6 first, test with `http://127.0.0.1:8080` since rootless Podman maps IPv4 by default.
 
+## Releases and deployment (Phase 11)
+
+- `npm run release` builds everything and writes `release/production-line-web-<version>.tar.gz` (+ `.sha256`): built server and client, migrations, the lockfile and workspace manifests, the systemd unit, and the standalone install scripts. `--no-build` reuses an existing build, `--version X.Y.Z` overrides the manifest version (CI passes the tag).
+- `deploy/` holds the Dockerfile, `compose.yaml`, the Quadlet unit, and the systemd unit; `scripts/install-*.sh` are the user-facing installers (idempotent; re-running upgrades). Every deploy file documents `TZ` and the `DATA_DIR` default for its target (dev doc §13).
+- `scripts/upgrade-test.sh OLD NEW` boots OLD on a fresh volume, seeds an owner and a printer, then boots NEW on the same volume and asserts the data and migrations survive. CI runs it against the last published `:latest` (skipped until one exists); locally use `CONTAINER_RUNTIME=podman`.
+- `.github/workflows/release.yml` runs on `v*` tags: lint/test/build, multi-arch push to `ghcr.io/goblinfoddergames/production-line-web` (`:<version>`, plus `:latest` for non-pre-releases), smoke and upgrade tests against the pushed image, and a GitHub release carrying the tarball. `GITHUB_TOKEN` can only push packages under the repository owner's namespace; add a `GHCR_TOKEN` secret with `write:packages` on the organisation if the repo and the image live under different owners.
+- The standalone path can be rehearsed without a Pi in a systemd container: build a `debian:trixie` image with `systemd` and `libatomic1` installed, run it rootless with `podman run --systemd=always --privileged --security-opt label=disable` (the unit's mount sandboxing needs `CAP_SYS_ADMIN`, and SELinux would otherwise block the bind mounts), bind-mount a Node 26 tree and the repo, and run `scripts/install-standalone.sh --tarball …` inside it. Under `--platform linux/arm64` QEMU user-mode emulation the container's systemd cannot spawn any service (journald fails the same way), so on arm64 only the tarball unpack, `npm ci`, and a direct `node server/dist/index.js` run as `plweb` can be checked; the unit itself needs real hardware.
+
 ## Database and migrations
 
 - SQLite via `node:sqlite`, one file at `$DATA_DIR/app.db`, WAL mode. Every connection sets `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`.

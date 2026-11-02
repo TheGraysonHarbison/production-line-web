@@ -397,7 +397,13 @@ test.describe("desktop scheduling", () => {
       page.locator(`[data-testid="tick"][data-date="${tomorrow}"][data-day-start]`),
     ).toBeInViewport();
     await expect(heading).not.toHaveText(todayText ?? "");
-    await expect(nowLine).not.toBeInViewport();
+    // The jump puts the day start right after the pinned label column (160px), so the present is
+    // now left of that column: under it or scrolled away. `toBeInViewport` would still count the
+    // part hidden under the sticky labels, which bites in the last two hours before midnight.
+    const timelineBox = (await page.getByTestId("timeline").boundingBox()) as { x: number };
+    await expect
+      .poll(async () => ((await nowLine.boundingBox()) as { x: number }).x)
+      .toBeLessThan(timelineBox.x + 160);
     await expect(page).toHaveURL(new RegExp(`/day/${tomorrow}$`));
     await settleScroll(page);
 
