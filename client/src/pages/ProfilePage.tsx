@@ -152,77 +152,77 @@ export function ProfilePage() {
             <option value="24h">24-hour (13:30)</option>
           </select>
         </Field>
+        <section
+          className="flex flex-col gap-4"
+          aria-labelledby="avatar-title"
+          data-testid="avatar-section"
+        >
+          <h4 id="avatar-title" className="font-medium">
+            Profile image
+          </h4>
+          <ErrorNotice
+            error={avatar.error ?? removeAvatar.error}
+            map={{
+              image_type_not_allowed:
+                "Not a supported image (PNG, JPEG, TIFF, WEBP, or camera RAW).",
+              image_too_large: "Larger than 10 MB.",
+              images_disabled: "Image uploads are turned off.",
+            }}
+          />
+          <div className="flex flex-wrap items-center gap-4">
+            <Avatar user={me.data} size={64} />
+            {meta.data?.images_enabled ? (
+              <>
+                <input
+                  id="avatar-input"
+                  type="file"
+                  accept={IMAGE_ACCEPT}
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) avatar.mutate(file);
+                    e.target.value = "";
+                  }}
+                  data-testid="avatar-upload"
+                />
+                <label htmlFor="avatar-input" className={`${secondaryButtonClass} cursor-pointer`}>
+                  {me.data.avatar_url ? "Replace image" : "Upload image"}
+                </label>
+                {avatarProgress !== null ? (
+                  <progress
+                    className="h-2 w-32"
+                    value={avatarProgress}
+                    max={1}
+                    aria-label="Uploading"
+                  />
+                ) : null}
+              </>
+            ) : (
+              <span className="text-ink-muted text-sm">
+                Image uploads are off. An admin can enable them under Settings → General.
+              </span>
+            )}
+            {me.data.avatar_url ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => removeAvatar.mutate()}
+                disabled={removeAvatar.isPending}
+              >
+                Remove image
+              </button>
+            ) : null}
+          </div>
+          <p className="text-ink-muted text-sm">
+            Shown instead of your initial. PNG, JPEG, or WEBP display best; up to 10 MB.
+          </p>
+        </section>
         <div>
           <button type="submit" className={buttonClass} disabled={prefs.isPending}>
             Save preferences
           </button>
         </div>
       </form>
-
-      <section
-        className="flex flex-col gap-4"
-        aria-labelledby="avatar-title"
-        data-testid="avatar-section"
-      >
-        <h3 id="avatar-title" className="font-medium text-lg">
-          Profile image
-        </h3>
-        <ErrorNotice
-          error={avatar.error ?? removeAvatar.error}
-          map={{
-            image_type_not_allowed: "Not a supported image (PNG, JPEG, TIFF, WEBP, or camera RAW).",
-            image_too_large: "Larger than 10 MB.",
-            images_disabled: "Image uploads are turned off.",
-          }}
-        />
-        <div className="flex flex-wrap items-center gap-4">
-          <Avatar user={me.data} size={64} />
-          {meta.data?.images_enabled ? (
-            <>
-              <input
-                id="avatar-input"
-                type="file"
-                accept={IMAGE_ACCEPT}
-                className="sr-only"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) avatar.mutate(file);
-                  e.target.value = "";
-                }}
-                data-testid="avatar-upload"
-              />
-              <label htmlFor="avatar-input" className={`${secondaryButtonClass} cursor-pointer`}>
-                {me.data.avatar_url ? "Replace image" : "Upload image"}
-              </label>
-              {avatarProgress !== null ? (
-                <progress
-                  className="h-2 w-32"
-                  value={avatarProgress}
-                  max={1}
-                  aria-label="Uploading"
-                />
-              ) : null}
-            </>
-          ) : (
-            <span className="text-ink-muted text-sm">
-              Image uploads are off. An admin can enable them under Settings → General.
-            </span>
-          )}
-          {me.data.avatar_url ? (
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={() => removeAvatar.mutate()}
-              disabled={removeAvatar.isPending}
-            >
-              Remove image
-            </button>
-          ) : null}
-        </div>
-        <p className="text-ink-muted text-sm">
-          Shown instead of your initial. PNG, JPEG, or WEBP display best; up to 10 MB.
-        </p>
-      </section>
 
       <form
         className="flex flex-col gap-4"

@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 8080;
+// Override when something else holds 8080 on the dev host (same spirit as PLW_E2E_DATA_DIR).
+const PORT = Number(process.env.PLW_E2E_PORT ?? 8080);
 // Every e2e run starts from a fresh, empty DATA_DIR so the first-boot flow is testable.
 const DATA_DIR = process.env.PLW_E2E_DATA_DIR ?? mkdtempSync(join(tmpdir(), "plw-e2e-"));
 
